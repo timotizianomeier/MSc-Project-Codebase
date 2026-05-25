@@ -1,46 +1,40 @@
 import matplotlib.image as mpimg
 from deepface import DeepFace
 import matplotlib.pyplot as plt
-from pprint import pprint
 from typing import List
-import pandas as pd
 
-img1_path = 'test_assets/sad.jpg'
-img2_path = 'test_assets/angry.jpg'
+img_path = 'test_assets/IMG_1103.jpeg'
+img = mpimg.imread(img_path)
 
-img1 = mpimg.imread(img1_path)
-img2 = mpimg.imread(img2_path)
-
-plt.subplot(1, 2, 1)
-plt.imshow(img1)
-plt.subplot(1, 2, 2)
-plt.imshow(img2)
+plt.imshow(img)
 plt.show()
 
-img1 = DeepFace.extract_faces(img1_path)
-img2 = DeepFace.extract_faces(img2_path)
+img = DeepFace.extract_faces(img_path)
 
-plt.subplot(1, 2, 1)
-plt.imshow(img1[0]['face'])
-plt.subplot(1, 2, 2)
-plt.imshow(img2[0]['face'])
+plt.imshow(img[0]['face'])
 plt.show()
 
-model_name = 'Facenet'
-
-resp = DeepFace.verify(img1_path = img1_path, img2_path = img2_path, model_name = model_name)
-pprint(resp)
-
-objs: List[dict] = DeepFace.analyze(
- img_path = img1_path, actions = ['age', 'gender', 'race', 'emotion']
-)
-df = pd.DataFrame(objs)
-print(df)
-print(df.describe())
+backends = [
+    'opencv', 'ssd', 'dlib', 'mtcnn', 'fastmtcnn',
+    'retinaface', 'mediapipe', 'yolov8n', 'yolov8m',
+    'yolov8l', 'yolov11n', 'yolov11s', 'yolov11m',
+    'yolov11l', 'yolov12n', 'yolov12s', 'yolov12m',
+    'yolov12l', 'yunet', 'centerface',
+]
+detector = backends[0]
+align = True
 
 objs: List[dict] = DeepFace.analyze(
- img_path = img2_path, actions = ['age', 'gender', 'race', 'emotion']
+    img_path=img_path,
+    actions=['age', 'gender', 'race', 'emotion'],
+    detector_backend = detector,
+    align = align
 )
-df = pd.DataFrame(objs)
-print(df)
-print(df.describe())
+
+best_face = max(objs, key=lambda f: f['face_confidence'])
+print({
+    "age": best_face['age'],
+    "emotion": best_face['dominant_emotion'],
+    "gender": best_face['dominant_gender'],
+    "race": best_face['dominant_race'],
+})
