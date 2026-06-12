@@ -1,7 +1,7 @@
 from reachy_mini import ReachyMini
 
 # Connect to the running daemon
-with ReachyMini() as mini:
+with ReachyMini() as mini: # ReachyMini(connection_mode="localhost_only") to force USB connection
     print("Connected to Reachy Mini! ")
     
     # Wiggle antennas
