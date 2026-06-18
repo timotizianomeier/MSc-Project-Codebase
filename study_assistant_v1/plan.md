@@ -293,12 +293,24 @@ ANSWER (robot-cam-only / laptop-webcam / both): Initially, we will us the robot 
 
 ---
 
-## What I'll Do Once You Answer
+## Status (updated 2026-06-18)
 
-1. Ask you to run the scaffold command (I'll give you the exact command; the `--publish` variant requires your HF credentials so you run it, not me).
-2. Walk through verifying the baseline end-to-end.
-3. Trim per step 3 above.
-4. Write the perception module interfaces and Null stubs.
-5. Write the `EventLogger` and wire it into the session lifecycle.
+### ✅ Step 1 — Scaffold complete
+App: `MSc-Project-Codebase/study_assistant_v1/`. Template: conversation (develop branch, OpenAI Realtime only — HuggingFace dropped upstream). Nested `.git` removed; files track under `MSc-Project-Codebase` git repo.
 
-No code before you've answered the questions above.
+### ✅ Step 2 — Baseline confirmed
+`python3.11 src/study_assistant_v1/main.py --gradio` → full spoken conversation. SSL fix applied (Install Certificates.command). reachy-mini upgraded to 1.8.3 to match daemon.
+
+### ✅ Step 3 — Trimmed
+Removed `tools/dance.py`, `tools/stop_dance.py`. Updated locked profile: `instructions.txt` (ADHD TA persona), `tools.txt` (play_emotion, stop_emotion, move_head, sweep_look). `moves.py`: control loop 100Hz → 20Hz (WiFi-safe).
+
+### ✅ Step 4 — Perception interfaces
+`src/study_assistant_v1/perception/`: EmotionRecognizer, EngagementDetector, ContextProvider Protocols + Null stubs. `StudyConfig` dataclass + `load_study_config_from_env()` + `build_perception()`. Feature flags in `.env`. Consistency check enforces all-Null backends for control condition.
+
+### ✅ Step 5 — Event logging
+`src/study_assistant_v1/event_logger.py`. CSV: `timestamp_iso, session_id, participant_id, condition, event_type, module, value, metadata`. Writes to `logs/<participant_id>_<timestamp>.csv`. Thread-safe, flushes every row.
+
+### Remaining wiring (next session)
+- Wire `EventLogger` + `StudyConfig` into `main.py` lifecycle
+- Implement real perception backends (DeepFace, MediaPipe, PDF parser)
+- Build Pomodoro timer and inattention → intervention decision loop
