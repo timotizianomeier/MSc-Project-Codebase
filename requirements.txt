@@ -2,3 +2,10 @@
 deepface
 tf-keras
 matplotlib
+
+# fer-2013
+torchvision
+
+# reachy
+reachy-mini==1.8.1
+reachy-mini[mujoco]
