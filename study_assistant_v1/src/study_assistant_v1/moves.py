@@ -263,7 +263,7 @@ class MovementManager:
         self.move_queue: deque[Move] = deque()
 
         # Configuration
-        self.idle_inactivity_delay = 0.3  # seconds
+        self.idle_inactivity_delay = 10.0  # seconds — longer on WiFi; 0.3s fired immediately and stressed motors
         self.target_frequency = CONTROL_LOOP_FREQUENCY_HZ
         self.target_period = 1.0 / self.target_frequency
 
@@ -511,7 +511,7 @@ class MovementManager:
                     breathing_move = BreathingMove(
                         interpolation_start_pose=current_head_pose,
                         interpolation_start_antennas=current_antennas,
-                        interpolation_duration=1.0,
+                        interpolation_duration=4.0,  # slow on WiFi — 1s was too abrupt
                     )
                     self.move_queue.append(breathing_move)
                     logger.debug("Started breathing after %.1fs of inactivity", idle_for)
