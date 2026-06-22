@@ -5,9 +5,9 @@
 ## 📅 [22.06.2026] — Entry #2
 
 ### 🎯 Goals for Today
-- [] Fork the LLM convrsation app
-- [] Go through it, understand it bit by bit
-- [] Test with OpenAI key if it works 
+- [x] Fork the LLM convrsation app
+- [WIP] Go through it, understand it bit by bit
+- [x] Test with OpenAI key if it works 
 
 ---
 
@@ -15,31 +15,33 @@
 > 
 
 #### What I tried
-- Create a new app with reachy mini app assistant
+- Fork existing LLM module, get to run and understand
 
 #### What worked
 - Successfully tweaked personality in instructions.txt and available tools in tools.txt
 
 #### What didn't / open questions
-- Go slower when building
-- Probably best to first fully understand the reachy mini comversation app
+- Need to understand what is actually crucial and what is not, too large to understand non-crucial bits as well, need to focus
 
 #### Random thoughts / ideas
 - For switching out OpenAI key with free tier HF: 
     1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
     2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
     3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
 
 ---
 
 ### 📦 End of Day Summary
 **Shipped:** 
-Stripped back version of LLM module, but seems to have major bugs.
+Forked and setup working LLM comversation module
 
 **Blockers:** 
 
 **Tomorrow:** 
-Understand difference to what I already built
+Continue with configure.py
+Fix hardware issues
 
 ---
 ---
