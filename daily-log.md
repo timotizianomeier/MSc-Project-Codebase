@@ -2,7 +2,7 @@
 
 ---
 
-## 📅 [22.06.2026] — Entry #1
+## 📅 [22.06.2026] — Entry #2
 
 ### 🎯 Goals for Today
 - [] Fork the LLM convrsation app
@@ -18,15 +18,17 @@
 - Create a new app with reachy mini app assistant
 
 #### What worked
-- Creating a new app is fairly straightforward
+- Successfully tweaked personality in instructions.txt and available tools in tools.txt
 
 #### What didn't / open questions
 - Go slower when building
 - Probably best to first fully understand the reachy mini comversation app
 
 #### Random thoughts / ideas
-- Wifi version does seem a bit smoother than the Lite one
-- Maybe better to first test in simulation
+- For switching out OpenAI key with free tier HF: 
+    1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
+    2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
+    3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
 
 ---
 
