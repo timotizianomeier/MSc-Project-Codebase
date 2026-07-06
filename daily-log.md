@@ -2,6 +2,51 @@
 
 ---
 
+## 📅 [06.07.2026] — Entry #4
+
+### 🎯 Goals for Today
+- [WIP] Go through it, understand it bit by bit
+- [ ] Continue understanding what was done before holidays
+- [ ] Then continue with other bits needed before I can add on
+- [ ] Then continue with other bits needed before I can add on
+- [ ] Fix hardware issues
+- [ ] Try set up with local LLM Gemma
+
+---
+
+### 🔬 Findings & Notes
+> 
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- For switching out OpenAI key with free tier HF: 
+    1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
+    2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
+    3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
+- Wifi version does seem a bit smoother than the Lite one
+- Maybe better to first test in simulation
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+
+**Blockers:** 
+
+**Tomorrow:** 
+
+---
+---
+
 ## 📅 [23.06.2026] — Entry #3
 
 ### 🎯 Goals for Today
