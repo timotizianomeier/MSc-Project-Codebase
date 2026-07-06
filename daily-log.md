@@ -8,14 +8,26 @@
 - [WIP] Go through it, understand it bit by bit
 - [ ] Continue understanding what was done before holidays
 - [ ] Then continue with other bits needed before I can add on
-- [ ] Then continue with other bits needed before I can add on
 - [ ] Fix hardware issues
 - [ ] Try set up with local LLM Gemma
 
 ---
 
 ### 🔬 Findings & Notes
-> 
+
+Answer next:
+- Better to first setup local LLM, then continue building?
+- Does fork and copy repo structure make sense?
+
+Order of build:
+- Understand existing modules as I knew them pre-holidays
+- Then where do I need to build sth on top
+- Get local LLM version running
+- Tweak prrofile to TA, get running
+- Make emotion recognition work, robot cam
+- Make engagement detection work, robot cam
+- Add chat interface for students to interact with and ingest content, use NeetCode as example
+- Add external camera, reroute inattention detection modules with these images
 
 #### What I tried
 - 
