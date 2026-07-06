@@ -8,12 +8,8 @@
 - [WIP] Go through it, understand it bit by bit
 - [ ] Continue understanding what was done before holidays
 - [ ] Then continue with other bits needed before I can add on
-- [ ] Fix hardware issues
+- [X] Fix hardware issues
 - [ ] Try set up with local LLM Gemma
-
----
-
-### 🔬 Findings & Notes
 
 Answer next:
 - Better to first setup local LLM, then continue building?
@@ -28,6 +24,12 @@ Order of build:
 - Make engagement detection work, robot cam
 - Add chat interface for students to interact with and ingest content, use NeetCode as example
 - Add external camera, reroute inattention detection modules with these images
+
+---
+
+### 🔬 Findings & Notes
+- Worked through the Reachy hardware issue and fixed it
+- Added tips-and-tricks.md to the lab folder
 
 #### What I tried
 - 
@@ -55,6 +57,7 @@ Order of build:
 **Blockers:** 
 
 **Tomorrow:** 
+- Continue with understanding existing setup and artifact, then iterate quickly
 
 ---
 ---
