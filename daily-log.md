@@ -6,7 +6,7 @@
 
 ### 🎯 Goals for Today
 - [WIP] Go through it, understand it bit by bit
-- [ ] Continue understanding what was done before holidays
+- [X] Continue understanding what was done before holidays
 - [ ] Then continue with other bits needed before I can add on
 - [ ] Try set up with local LLM Gemma
 
@@ -27,7 +27,9 @@ Order of build:
 ---
 
 ### 🔬 Findings & Notes
-- 
+- Went through old notes on setup again
+- Resolved forked vs. own repo topic
+- Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
 
 #### What I tried
 - 
@@ -36,7 +38,7 @@ Order of build:
 - 
 
 #### What didn't / open questions
-- 
+- Might need to go through the most recently pulled architecture again
 
 #### Random thoughts / ideas
 - For switching out OpenAI key with free tier HF: 
