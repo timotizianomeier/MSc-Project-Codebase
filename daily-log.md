@@ -5,21 +5,17 @@
 ## 📅 [07.07.2026] — Entry #5
 
 ### 🎯 Goals for Today
-- [WIP] Go through it, understand it bit by bit
-- [X] Continue understanding what was done before holidays
-- [ ] Then continue with other bits needed before I can add on
-- [ ] Try set up with local LLM Gemma
+- [WIP] Continuously understand relevant bits and pieces of codebase
+- [WIP] Continue build in specified order, specifically, 
 
 Answer next:
-- Better to first setup local LLM, then continue building?
-- Does fork and copy repo structure make sense?
 
 Order of build:
-- Understand existing modules as I knew them pre-holidays
-- Then where do I need to build sth on top
-- Get local LLM version running
-- Tweak prrofile to TA, get running
-- Make emotion recognition work, robot cam
+WIP Understand existing modules as I knew them pre-holidays
+WIP Then where do I need to build sth on top
+- Get local LLM version running, hf or Gemma
+X Tweak prrofile to TA, get running
+- Make emotion recognition work, robot cam (first sketch pipeline, input signals, output signals, data input, pre-processing, model in between)
 - Make engagement detection work, robot cam
 - Add chat interface for students to interact with and ingest content, use NeetCode as example
 - Add external camera, reroute inattention detection modules with these images
@@ -30,15 +26,19 @@ Order of build:
 - Went through old notes on setup again
 - Resolved forked vs. own repo topic
 - Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
+- Might need to adjust idle behaviours, there are a lot of them right now
+- Check out remember / forget tools that were added to keep session context
+- Maybe save conversation transcripts, just for debugging purposes
 
 #### What I tried
-- 
+- Set up the Reachy with hf's LLM
 
 #### What worked
-- 
+- hf LLM hosted works really well, have to try local one as well
 
 #### What didn't / open questions
 - Might need to go through the most recently pulled architecture again
+- Experiment with ADHD profile, maybe show Nicole
 
 #### Random thoughts / ideas
 - For switching out OpenAI key with free tier HF: 
@@ -53,11 +53,13 @@ Order of build:
 
 ### 📦 End of Day Summary
 **Shipped:** 
+- emotion_classifier and tests
+- emotion_monitor and tests
 
 **Blockers:** 
 
 **Tomorrow:** 
-- 
+- Continue with emotion wiring to realtime.py
 
 ---
 ---
