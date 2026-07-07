@@ -2,6 +2,64 @@
 
 ---
 
+## 📅 [07.07.2026] — Entry #5
+
+### 🎯 Goals for Today
+- [WIP] Go through it, understand it bit by bit
+- [ ] Continue understanding what was done before holidays
+- [ ] Then continue with other bits needed before I can add on
+- [ ] Try set up with local LLM Gemma
+
+Answer next:
+- Better to first setup local LLM, then continue building?
+- Does fork and copy repo structure make sense?
+
+Order of build:
+- Understand existing modules as I knew them pre-holidays
+- Then where do I need to build sth on top
+- Get local LLM version running
+- Tweak prrofile to TA, get running
+- Make emotion recognition work, robot cam
+- Make engagement detection work, robot cam
+- Add chat interface for students to interact with and ingest content, use NeetCode as example
+- Add external camera, reroute inattention detection modules with these images
+
+---
+
+### 🔬 Findings & Notes
+- 
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- For switching out OpenAI key with free tier HF: 
+    1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
+    2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
+    3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
+- Wifi version does seem a bit smoother than the Lite one
+- Maybe better to first test in simulation
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+
+**Blockers:** 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [06.07.2026] — Entry #4
 
 ### 🎯 Goals for Today
