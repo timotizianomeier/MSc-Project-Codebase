@@ -1,6 +1,5 @@
 """Rolling emotion-window tracking and intervention decision, following Lalwani et al."""
 
-from __future__ import annotations
 from typing import ClassVar
 from dataclasses import dataclass
 
