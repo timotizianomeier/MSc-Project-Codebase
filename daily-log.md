@@ -2,6 +2,64 @@
 
 ---
 
+## 📅 [08.07.2026] — Entry #6
+
+### 🎯 Goals for Today
+- [WIP] Continuously understand relevant bits and pieces of codebase
+- [WIP] Continue build in specified order as specified below
+
+Answer next:
+
+Order of build:
+WIP Understand existing modules as I knew them pre-holidays
+WIP Then where do I need to build sth on top
+- Get local LLM version running, hf or Gemma
+X Tweak prrofile to TA, get running
+- Make emotion recognition work, robot cam (first sketch pipeline, input signals, output signals, data input, pre-processing, model in between)
+- Make engagement detection work, robot cam
+- Add chat interface for students to interact with and ingest content, use NeetCode as example
+- Add external camera, reroute inattention detection modules with these images
+
+---
+
+### 🔬 Findings & Notes
+- Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
+- Might need to adjust idle behaviours, there are a lot of them right now
+- Check out remember / forget tools that were added to keep session context
+- Maybe save conversation transcripts, just for debugging purposes
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- Might need to go through the most recently pulled architecture again
+- Experiment with ADHD profile, maybe show Nicole
+
+#### Random thoughts / ideas
+- For switching out OpenAI key with free tier HF: 
+    1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
+    2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
+    3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
+- Wifi version does seem a bit smoother than the Lite one
+- Maybe better to first test in simulation
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+
+**Blockers:** 
+
+**Tomorrow:** 
+
+
+---
+---
+
 ## 📅 [07.07.2026] — Entry #5
 
 ### 🎯 Goals for Today
