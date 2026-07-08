@@ -30,12 +30,13 @@ X Tweak prrofile to TA, get running
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+-
 
 #### What worked
 - 
 
 #### What didn't / open questions
+- DeepFace is not very robust, need to experiment with other frameworks
 - Might need to go through the most recently pulled architecture again
 - Experiment with ADHD profile, maybe show Nicole
 
