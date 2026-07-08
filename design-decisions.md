@@ -4,6 +4,7 @@
 
 ### Log
 
+- [08.07.2026] Added tf-keras explicitly to the emotion extra as deepface's own packaging doesn't declare it, but its retinaface backend needs it under TensorFlow 2.16+'s Keras-3 default, and it's imported eagerly regardless of which detector backend is actually configured.
 - [08.07.2026] Poll task started in start_up(), not _run_realtime_session() — survives reconnects, which are routine here (profile/voice switches), not rare.
 - [08.07.2026] Sampling continues through a disconnected gap, only the send is gated on connection state.
 - [07.07.2026] EmotionMonitor as a dependency-free pure-logic class vs. bundling classification in for testability (mirrors idle_policy.py's split).
