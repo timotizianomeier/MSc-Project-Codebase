@@ -597,16 +597,20 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         """Classify the current frame, record it, and send an intervention if warranted."""
         frame = self.deps.reachy_mini.media.get_frame()
         if frame is None:
+            logger.debug("Emotion poll: no frame available")
             return
 
         emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
         if emotion is None:
+            logger.debug("Emotion poll: no face detected")
             return
 
         now = time.monotonic()
         self._emotion_monitor.record(emotion, now)
+        logger.debug("Emotion poll: emotion=%s negative_share=%.2f", emotion, self._emotion_monitor.negative_share())
 
         if not self._is_connected():
+            logger.debug("Emotion poll: not connected, skipping intervention check")
             return
         if self._emotion_monitor.should_intervene(now, self._response_done_event.is_set(), self.last_activity_time):
             await self._send_emotion_intervention()
