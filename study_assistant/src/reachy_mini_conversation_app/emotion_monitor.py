@@ -56,3 +56,8 @@ class EmotionMonitor:
     def mark_intervened(self, now: float) -> None:
         """Record that an intervention was just sent, starting the intervention cooldown."""
         self._last_trigger_time = now
+
+    @property
+    def last_trigger_time(self) -> float | None:
+        """Return the monotonic time of the last intervention, or None if it hasn't fired yet."""
+        return self._last_trigger_time

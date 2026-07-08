@@ -607,12 +607,29 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         now = time.monotonic()
         self._emotion_monitor.record(emotion, now)
-        logger.debug("Emotion poll: emotion=%s negative_share=%.2f", emotion, self._emotion_monitor.negative_share())
+
+        negative_share = self._emotion_monitor.negative_share()
+        response_done = self._response_done_event.is_set()
+        interaction_gap = now - self.last_activity_time
+        last_trigger = self._emotion_monitor.last_trigger_time
+        intervention_gap = now - last_trigger if last_trigger is not None else None
+        logger.debug(
+            "Emotion poll: emotion=%s negative_share=%.2f (need>%.2f) response_done=%s "
+            "interaction_gap=%.1fs (need>%.0fs) intervention_gap=%s (need>%.0fs)",
+            emotion,
+            negative_share,
+            self._emotion_monitor.NEGATIVE_THRESHOLD,
+            response_done,
+            interaction_gap,
+            self._emotion_monitor.INTERACTION_COOLDOWN_SECONDS,
+            f"{intervention_gap:.1f}s" if intervention_gap is not None else "never",
+            self._emotion_monitor.INTERVENTION_COOLDOWN_SECONDS,
+        )
 
         if not self._is_connected():
             logger.debug("Emotion poll: not connected, skipping intervention check")
             return
-        if self._emotion_monitor.should_intervene(now, self._response_done_event.is_set(), self.last_activity_time):
+        if self._emotion_monitor.should_intervene(now, response_done, self.last_activity_time):
             await self._send_emotion_intervention()
             self._emotion_monitor.mark_intervened(now)
 
