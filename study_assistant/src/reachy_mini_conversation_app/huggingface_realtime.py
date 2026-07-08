@@ -42,6 +42,7 @@ from reachy_mini_conversation_app.prompts import (
     get_session_greeting_prompt,
 )
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16
+from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor
 from reachy_mini_conversation_app.tools.core_tools import (
     ToolSpec,
     ToolDependencies,
@@ -143,6 +144,10 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         # Background tool manager
         self.tool_manager = BackgroundToolManager()
+
+        # Emotion recognition: rolling window + the task that samples the camera into it
+        self._emotion_monitor = EmotionMonitor()
+        self._emotion_poll_task: asyncio.Task[None] | None = None
 
         # Response-in-progress guard: the Realtime API only allows one active
         # response per conversation at a time.  A dedicated worker task
