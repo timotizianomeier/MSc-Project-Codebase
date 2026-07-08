@@ -27,6 +27,7 @@ X Tweak prrofile to TA, get running
 - Might need to adjust idle behaviours, there are a lot of them right now
 - Check out remember / forget tools that were added to keep session context
 - Maybe save conversation transcripts, just for debugging purposes
+- Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
 - 
