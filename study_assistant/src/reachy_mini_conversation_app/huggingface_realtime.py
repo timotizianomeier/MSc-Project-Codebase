@@ -37,6 +37,7 @@ from reachy_mini_conversation_app.config import (
     get_hf_connection_selection,
 )
 from reachy_mini_conversation_app.prompts import (
+    EMOTION_INTERVENTION_PROMPT,
     get_session_voice,
     get_session_instructions,
     get_session_greeting_prompt,
@@ -479,6 +480,25 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.info("Queued startup greeting prompt")
         except Exception as e:
             logger.warning("Failed to queue startup greeting prompt: %s", e)
+
+    async def _send_emotion_intervention(self) -> None:
+        """Prompt the model to check in after sustained negative affect is detected."""
+        if not self.connection:
+            return
+
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": EMOTION_INTERVENTION_PROMPT}],
+                },
+            )
+            self._mark_activity("emotion_intervention")
+            await self._safe_response_create()
+            logger.info("Queued emotion intervention prompt")
+        except Exception as e:
+            logger.warning("Failed to queue emotion intervention prompt: %s", e)
 
     async def _response_sender_loop(self) -> None:
         """Dedicated worker that sends ``response.create()`` calls serially.
