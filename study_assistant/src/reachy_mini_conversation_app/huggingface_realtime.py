@@ -48,6 +48,7 @@ from reachy_mini_conversation_app.tools.core_tools import (
     ToolDependencies,
     get_tool_specs,
 )
+from reachy_mini_conversation_app.emotion_classifier import classify_dominant_emotion
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
 from reachy_mini_conversation_app.tools.background_tool_manager import (
     ToolCallRoutine,
@@ -60,6 +61,7 @@ logger = logging.getLogger(__name__)
 
 _RESPONSE_DONE_TIMEOUT: Final[float] = 30.0
 _RESPONSE_REJECTION_RETRY_DELAY: Final[float] = 0.5
+_EMOTION_POLL_INTERVAL_S: Final[float] = 5.0
 
 
 class InputTranscriptChunksByItem(BaseModel):
@@ -558,6 +560,34 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     break
 
                 sent = True
+
+    async def _emotion_poll_loop(self) -> None:
+        """Sample the camera on a fixed interval, feeding the emotion monitor and its interventions."""
+        while True:
+            await asyncio.sleep(_EMOTION_POLL_INTERVAL_S)
+            try:
+                await self._poll_emotion_once()
+            except Exception:
+                logger.exception("Emotion poll iteration failed; continuing")
+
+    async def _poll_emotion_once(self) -> None:
+        """Classify the current frame, record it, and send an intervention if warranted."""
+        frame = self.deps.reachy_mini.media.get_frame()
+        if frame is None:
+            return
+
+        emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
+        if emotion is None:
+            return
+
+        now = time.monotonic()
+        self._emotion_monitor.record(emotion, now)
+
+        if not self._is_connected():
+            return
+        if self._emotion_monitor.should_intervene(now, self._response_done_event.is_set(), self.last_activity_time):
+            await self._send_emotion_intervention()
+            self._emotion_monitor.mark_intervened(now)
 
     async def _handle_tool_result(self, completed_tool: ToolNotification) -> None:
         """Process the result of a tool call."""
