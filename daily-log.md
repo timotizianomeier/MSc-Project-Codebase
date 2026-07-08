@@ -11,11 +11,8 @@
 Answer next:
 
 Order of build:
-WIP Understand existing modules as I knew them pre-holidays
-WIP Then where do I need to build sth on top
-- Get local LLM version running, hf or Gemma
 X Tweak prrofile to TA, get running
-- Make emotion recognition work, robot cam (first sketch pipeline, input signals, output signals, data input, pre-processing, model in between)
+X Make emotion recognition work, robot cam (first sketch pipeline, input signals, output signals, data input, pre-processing, model in between)
 - Make engagement detection work, robot cam
 - Add chat interface for students to interact with and ingest content, use NeetCode as example
 - Add external camera, reroute inattention detection modules with these images
@@ -26,14 +23,13 @@ X Tweak prrofile to TA, get running
 - Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
 - Might need to adjust idle behaviours, there are a lot of them right now
 - Check out remember / forget tools that were added to keep session context
-- Maybe save conversation transcripts, just for debugging purposes
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
--
+- Emotion recognition v1 up and running
 
 #### What worked
-- 
+- Helpful to use stock images for simulation
 
 #### What didn't / open questions
 - DeepFace is not very robust, need to experiment with other frameworks
@@ -53,11 +49,13 @@ X Tweak prrofile to TA, get running
 
 ### 📦 End of Day Summary
 **Shipped:** 
+- Emotion recognition first iteration
 
 **Blockers:** 
 
 **Tomorrow:** 
-
+- Understand engagement detection repo, then start implementing as separate module and branch
+- Maybe switch meetings
 
 ---
 ---
