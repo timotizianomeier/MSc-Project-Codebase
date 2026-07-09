@@ -473,6 +473,31 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         except Exception as e:
             logger.warning("Failed to queue startup greeting prompt: %s", e)
 
+    async def send_user_text(self, text: str) -> None:
+        """Inject a typed user message into the live conversation and prompt a response."""
+        if not self.connection:
+            logger.warning("Cannot send user text: no active connection")
+            return
+
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": text,
+                        },
+                    ],
+                },
+            )
+            self._mark_activity("user_text_input")
+            await self._safe_response_create()
+            logger.info("Queued user text input")
+        except Exception as e:
+            logger.warning("Failed to queue user text input: %s", e)
+
     async def _response_sender_loop(self) -> None:
         """Dedicated worker that sends ``response.create()`` calls serially.
 
