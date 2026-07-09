@@ -120,6 +120,11 @@ class ConversationHandler(AsyncStreamHandler, ABC):
         ...
 
     @abstractmethod
+    async def send_user_text(self, text: str) -> None:
+        """Inject a typed user message into the conversation and prompt a response."""
+        ...
+
+    @abstractmethod
     async def get_available_voices(self) -> list[str]:
         """Return voices available for the active backend."""
         ...
