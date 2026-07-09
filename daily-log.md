@@ -14,7 +14,7 @@ Order of build:
 X Tweak profile to TA, get running
 X Make emotion recognition work, webcam
 - Make engagement detection work, webcam
-- Add chat interface for students to interact with and ingest content, use NeetCode as example
+WIP Add chat interface for students to interact with and ingest content, use NeetCode as example
 - Improv inattention detection modules
 - Maybe add other bits, eg phone detection
 - Test with robot cam
@@ -23,29 +23,19 @@ X Make emotion recognition work, webcam
 ---
 
 ### 🔬 Findings & Notes
-- Add in distractability delay and Pomodoro tracking later
-- Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
-- Might need to adjust idle behaviours, there are a lot of them right now
-- Check out remember / forget tools that were added to keep session context
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
 - Started building text UI interface to ingest more content
+- emotion-recognition with Reachy Lite, camera seems lower quality, but generally worked. Still, deepface buggy for real face, easier with stock image, but validated that no real difference between simulation vs Lite version runs
 
 #### What worked
-- 
+- Text interface working, no UI yet
 
 #### What didn't / open questions
 - Model weights of Del Duchetto currently not possible to download, need to weight for response
-- DeepFace is not very robust, need to experiment with other frameworks
-- Might need to go through the most recently pulled architecture again
-- Experiment with ADHD profile, maybe show Nicole
 
 #### Random thoughts / ideas
-- For switching out OpenAI key with free tier HF: 
-    1. Add a HuggingFaceRealtimeHandler class alongside the existing OpenaiRealtimeHandler
-    2. Read BACKEND_PROVIDER from the env and select which handler to instantiate at startup
-    3. Add HF_TOKEN / HF_REALTIME_WS_URL wiring
 - For enabling the chat interface next to speech:
     1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
 - Wifi version does seem a bit smoother than the Lite one
@@ -54,12 +44,14 @@ X Make emotion recognition work, webcam
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- Emotion recognition first iteration
+- Text input for context-awareness first iteration
 
-**Blockers:** 
+**Blockers:**
+- Model weights from Del Duchetto not available
 
 **Tomorrow:** 
-- 
+- Engagement detector if response received
+- UI bit for text input, later potentially further ways for context-ingestion
 
 ---
 ---
