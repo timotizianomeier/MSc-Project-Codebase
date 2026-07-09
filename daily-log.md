@@ -23,18 +23,20 @@ X Make emotion recognition work, webcam
 ---
 
 ### 🔬 Findings & Notes
+- Add in distractability delay and Pomodoro tracking later
 - Maybe latest pull resolved local LLM altogether, need to check how powerful hf free tier is, otherwise try Gemma
 - Might need to adjust idle behaviours, there are a lot of them right now
 - Check out remember / forget tools that were added to keep session context
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Started building text UI interface to ingest more content
 
 #### What worked
 - 
 
 #### What didn't / open questions
+- Model weights of Del Duchetto currently not possible to download, need to weight for response
 - DeepFace is not very robust, need to experiment with other frameworks
 - Might need to go through the most recently pulled architecture again
 - Experiment with ADHD profile, maybe show Nicole
