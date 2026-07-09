@@ -609,6 +609,20 @@ class LocalStream:
             logger.info("Microphone %s via web UI", "muted" if self._mic_muted else "unmuted")
             return JSONResponse({"muted": self._mic_muted})
 
+        class ChatPayload(BaseModel):
+            text: str
+
+        @settings_app.post(f"{SETTINGS_API_PREFIX}/chat/send")
+        def _send_chat(payload: ChatPayload) -> JSONResponse:
+            text = payload.text.strip()
+            if not text:
+                return JSONResponse({"ok": False, "error": "empty_text"}, status_code=400)
+            loop = self._asyncio_loop
+            if loop is None or not loop.is_running():
+                return JSONResponse({"ok": False, "error": "loop_unavailable"}, status_code=503)
+            asyncio.run_coroutine_threadsafe(self.handler.send_user_text(text), loop)
+            return JSONResponse({"ok": True})
+
         @settings_app.post(f"{SETTINGS_API_PREFIX}/backend_config")
         def _set_backend(payload: BackendPayload) -> JSONResponse:
             hf_selection = get_hf_connection_selection()
