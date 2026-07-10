@@ -37,6 +37,7 @@ from reachy_mini_conversation_app.config import (
     get_hf_connection_selection,
 )
 from reachy_mini_conversation_app.prompts import (
+    TASK_CONTEXT_PROMPT,
     get_session_voice,
     get_session_instructions,
     get_session_greeting_prompt,
@@ -474,11 +475,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.warning("Failed to queue startup greeting prompt: %s", e)
 
     async def send_user_text(self, text: str) -> None:
-        """Inject a typed user message into the live conversation and prompt a response."""
+        """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
         if not self.connection:
             logger.warning("Cannot send user text: no active connection")
             return
 
+        framed = f"{TASK_CONTEXT_PROMPT}\n\n{text}"
         try:
             await self.connection.conversation.item.create(
                 item={
@@ -487,7 +489,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     "content": [
                         {
                             "type": "input_text",
-                            "text": text,
+                            "text": framed,
                         },
                     ],
                 },
