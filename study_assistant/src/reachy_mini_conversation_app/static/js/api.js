@@ -79,6 +79,8 @@ export const deletePersonality = (name) =>
 export const getMicState = () => request("GET", `${API_PREFIX}/mic`);
 export const setMicMuted = (muted) => request("POST", `${API_PREFIX}/mic`, { body: { muted } });
 
+export const sendChat = (text) => request("POST", `${API_PREFIX}/chat/send`, { body: { text } });
+
 export const listVoices = () => request("GET", `${API_PREFIX}/voices`);
 export const getCurrentVoice = () => request("GET", `${API_PREFIX}/voices/current`);
 export const applyVoice = (voice) =>

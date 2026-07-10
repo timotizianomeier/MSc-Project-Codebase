@@ -737,6 +737,37 @@ button {
   min-height: 1.4em;
 }
 
+/* Task-context input (talk view) */
+
+.talk__chat {
+  display: flex;
+  gap: 8px;
+  width: min(520px, 100%);
+  margin-top: 4px;
+}
+
+.talk__chat-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.95rem;
+  padding: 10px 14px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.talk__chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+.talk__chat-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 /* 6. Settings view */
 
 .view--settings {

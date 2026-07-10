@@ -24,6 +24,11 @@ EMOTION_INTERVENTION_PROMPT = (
     "or a short coping strategy."
 )
 
+TASK_CONTEXT_PROMPT = (
+    "The student just shared the following as background about the task they're working on. "
+    "Briefly acknowledge that you've noted it, and don't solve, explain, or answer it unless they ask."
+)
+
 
 def _default_instructions_file() -> Path:
     return DEFAULT_PROFILES_DIRECTORY / DEFAULT_PROFILE_NAME / INSTRUCTIONS_FILENAME

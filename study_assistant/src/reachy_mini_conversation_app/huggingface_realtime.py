@@ -37,6 +37,7 @@ from reachy_mini_conversation_app.config import (
     get_hf_connection_selection,
 )
 from reachy_mini_conversation_app.prompts import (
+    TASK_CONTEXT_PROMPT,
     EMOTION_INTERVENTION_PROMPT,
     get_session_voice,
     get_session_instructions,
@@ -502,6 +503,32 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.info("Queued emotion intervention prompt")
         except Exception as e:
             logger.warning("Failed to queue emotion intervention prompt: %s", e)
+
+    async def send_user_text(self, text: str) -> None:
+        """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
+        if not self.connection:
+            logger.warning("Cannot send user text: no active connection")
+            return
+
+        framed = f"{TASK_CONTEXT_PROMPT}\n\n{text}"
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": framed,
+                        },
+                    ],
+                },
+            )
+            self._mark_activity("user_text_input")
+            await self._safe_response_create()
+            logger.info("Queued user text input")
+        except Exception as e:
+            logger.warning("Failed to queue user text input: %s", e)
 
     async def _response_sender_loop(self) -> None:
         """Dedicated worker that sends ``response.create()`` calls serially.
