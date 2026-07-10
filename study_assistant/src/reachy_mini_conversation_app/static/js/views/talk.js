@@ -160,6 +160,23 @@ export async function mountTalkView({ outlet, signal }) {
     syncMicAria();
   }
 
+  async function onChatSubmit(event) {
+    event.preventDefault();
+    if (chatPending) return;
+    const text = chatInput.value.trim();
+    if (!text) return;
+    chatPending = true;
+    try {
+      await sendChat(text);
+      if (signal.aborted) return;
+      chatInput.value = "";
+    } catch (error) {
+      if (!signal.aborted) caption.textContent = `Failed to send: ${describeError(error)}`;
+    } finally {
+      chatPending = false;
+    }
+  }
+
   async function refreshPersonalityState() {
     const personalityState = await fetchPersonalityState();
     if (signal.aborted || personalityState == null) return;
