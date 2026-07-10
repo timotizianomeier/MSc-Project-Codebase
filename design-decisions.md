@@ -19,3 +19,4 @@
 
 - Persona specified in the adhd_study_assistant profile
 - EMOTION_INTERVENTION_PROMPT in prompts.py
+- The wrapped framing around the text context a user feeds
