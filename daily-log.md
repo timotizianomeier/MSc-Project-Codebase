@@ -5,20 +5,28 @@
 ## 📅 [10.07.2026] — Entry #8
 
 ### 🎯 Goals for Today
-- UI bit for text input, later potentially further ways for context-ingestion
+X UI bit for text input, later potentially further ways for context-ingestion
 - Engagement detector given server hosting model weights is online again
 
-Answer next:
+### Status by module
 
-Order of build:
-X Tweak profile to TA, get running
-X Make emotion recognition work, webcam
-- Make engagement detection work, webcam
-WIP Add chat interface for students to interact with and ingest content, use NeetCode as example
-- Improve inattention detection modules
+Emotion recognition
+- Try different DeepFace backends
+- Try other frameworks
+
+Engagement detecation
+- Get working
+- See if there are other modules
+
+Context awareness
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
 - Maybe add other bits, eg phone detection
-- Test with robot cam
-- Add external camera, reroute inattention detection modules with these images
 
 ---
 
@@ -29,7 +37,7 @@ WIP Add chat interface for students to interact with and ingest content, use Nee
 - 
 
 #### What worked
-- 
+- UI ingestion layer for text
 
 #### What didn't / open questions
 - 
