@@ -6,7 +6,7 @@
 
 ### 🎯 Goals for Today
 X UI bit for text input, later potentially further ways for context-ingestion
-- Engagement detector given server hosting model weights is online again
+X Engagement detector given server hosting model weights is online again
 
 ### Status by module
 
@@ -51,13 +51,14 @@ Other
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- UI for text ingestion and prompt wrapping
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Build seperate engagement dection service
+- Wire to thesis repo
 
 ---
 ---
