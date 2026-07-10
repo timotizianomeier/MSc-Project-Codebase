@@ -57,7 +57,7 @@ export async function mountTalkView({ outlet, signal }) {
     "form",
     { class: "talk__chat", onSubmit: onChatSubmit },
     chatInput,
-    h("button", { type: "submit", class: "talk__chat-send" }, "Send")
+    h("button", { type: "submit", class: "btn btn--primary" }, "Send")
   );
 
   const view = h(
