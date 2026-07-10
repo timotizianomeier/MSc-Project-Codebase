@@ -386,6 +386,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         if self.deps.camera_enabled and self.deps.emotion_enabled:
             self._emotion_poll_task = asyncio.create_task(self._emotion_poll_loop(), name="emotion-poll")
+            logger.info("Emotion monitoring enabled")
 
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
