@@ -18,6 +18,12 @@ DEFAULT_GREETING_PROMPT = (
     "Keep it to one sentence, invite the user in naturally, and vary the wording each time."
 )
 
+EMOTION_INTERVENTION_PROMPT = (
+    "You've noticed signs of frustration or sadness in the student over the last while. "
+    "Check in gently, and if it fits, offer an encouraging, context-appropriate suggestion "
+    "or a short coping strategy."
+)
+
 
 def _default_instructions_file() -> Path:
     return DEFAULT_PROFILES_DIRECTORY / DEFAULT_PROFILE_NAME / INSTRUCTIONS_FILENAME

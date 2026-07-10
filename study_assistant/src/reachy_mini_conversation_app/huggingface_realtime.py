@@ -37,16 +37,19 @@ from reachy_mini_conversation_app.config import (
     get_hf_connection_selection,
 )
 from reachy_mini_conversation_app.prompts import (
+    EMOTION_INTERVENTION_PROMPT,
     get_session_voice,
     get_session_instructions,
     get_session_greeting_prompt,
 )
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16
+from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor
 from reachy_mini_conversation_app.tools.core_tools import (
     ToolSpec,
     ToolDependencies,
     get_tool_specs,
 )
+from reachy_mini_conversation_app.emotion_classifier import classify_dominant_emotion
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
 from reachy_mini_conversation_app.tools.background_tool_manager import (
     ToolCallRoutine,
@@ -59,6 +62,7 @@ logger = logging.getLogger(__name__)
 
 _RESPONSE_DONE_TIMEOUT: Final[float] = 30.0
 _RESPONSE_REJECTION_RETRY_DELAY: Final[float] = 0.5
+_EMOTION_POLL_INTERVAL_S: Final[float] = 5.0
 
 
 class InputTranscriptChunksByItem(BaseModel):
@@ -143,6 +147,10 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         # Background tool manager
         self.tool_manager = BackgroundToolManager()
+
+        # Emotion recognition: rolling window + the task that samples the camera into it
+        self._emotion_monitor = EmotionMonitor()
+        self._emotion_poll_task: asyncio.Task[None] | None = None
 
         # Response-in-progress guard: the Realtime API only allows one active
         # response per conversation at a time.  A dedicated worker task
@@ -375,6 +383,9 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         """Start the handler with minimal retries on unexpected websocket closure."""
         self.client = await self._build_realtime_client()
 
+        if self.deps.camera_enabled:
+            self._emotion_poll_task = asyncio.create_task(self._emotion_poll_loop(), name="emotion-poll")
+
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
@@ -473,6 +484,25 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         except Exception as e:
             logger.warning("Failed to queue startup greeting prompt: %s", e)
 
+    async def _send_emotion_intervention(self) -> None:
+        """Prompt the model to check in after sustained negative affect is detected."""
+        if not self.connection:
+            return
+
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": EMOTION_INTERVENTION_PROMPT}],
+                },
+            )
+            self._mark_activity("emotion_intervention")
+            await self._safe_response_create()
+            logger.info("Queued emotion intervention prompt")
+        except Exception as e:
+            logger.warning("Failed to queue emotion intervention prompt: %s", e)
+
     async def _response_sender_loop(self) -> None:
         """Dedicated worker that sends ``response.create()`` calls serially.
 
@@ -553,6 +583,55 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     break
 
                 sent = True
+
+    async def _emotion_poll_loop(self) -> None:
+        """Sample the camera on a fixed interval, feeding the emotion monitor and its interventions."""
+        while True:
+            await asyncio.sleep(_EMOTION_POLL_INTERVAL_S)
+            try:
+                await self._poll_emotion_once()
+            except Exception:
+                logger.exception("Emotion poll iteration failed; continuing")
+
+    async def _poll_emotion_once(self) -> None:
+        """Classify the current frame, record it, and send an intervention if warranted."""
+        frame = self.deps.reachy_mini.media.get_frame()
+        if frame is None:
+            logger.debug("Emotion poll: no frame available")
+            return
+
+        emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
+        if emotion is None:
+            logger.debug("Emotion poll: no face detected")
+            return
+
+        now = time.monotonic()
+        self._emotion_monitor.record(emotion, now)
+
+        negative_share = self._emotion_monitor.negative_share()
+        response_done = self._response_done_event.is_set()
+        interaction_gap = now - self.last_activity_time
+        last_trigger = self._emotion_monitor.last_trigger_time
+        intervention_gap = now - last_trigger if last_trigger is not None else None
+        logger.debug(
+            "Emotion poll: emotion=%s negative_share=%.2f (need>%.2f) response_done=%s "
+            "interaction_gap=%.1fs (need>%.0fs) intervention_gap=%s (need>%.0fs)",
+            emotion,
+            negative_share,
+            self._emotion_monitor.NEGATIVE_THRESHOLD,
+            response_done,
+            interaction_gap,
+            self._emotion_monitor.INTERACTION_COOLDOWN_SECONDS,
+            f"{intervention_gap:.1f}s" if intervention_gap is not None else "never",
+            self._emotion_monitor.INTERVENTION_COOLDOWN_SECONDS,
+        )
+
+        if not self._is_connected():
+            logger.debug("Emotion poll: not connected, skipping intervention check")
+            return
+        if self._emotion_monitor.should_intervene(now, response_done, self.last_activity_time):
+            await self._send_emotion_intervention()
+            self._emotion_monitor.mark_intervened(now)
 
     async def _handle_tool_result(self, completed_tool: ToolNotification) -> None:
         """Process the result of a tool call."""
@@ -965,6 +1044,13 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         await self.tool_manager.shutdown()
 
         await self._cancel_partial_transcript_task()
+
+        if self._emotion_poll_task is not None:
+            self._emotion_poll_task.cancel()
+            try:
+                await self._emotion_poll_task
+            except asyncio.CancelledError:
+                pass
 
         if self.connection:
             try:
