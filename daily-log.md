@@ -34,7 +34,7 @@ Other
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Merged emotion-recognition and text-input branches into main, resolved conflicts
 
 #### What worked
 - UI ingestion layer for text
