@@ -10,6 +10,12 @@ def parse_args() -> tuple[argparse.Namespace, list]:  # type: ignore
     parser = argparse.ArgumentParser("Reachy Mini Conversation App")
     parser.add_argument("--no-camera", default=False, action="store_true", help="Disable camera usage")
     parser.add_argument(
+        "--emotion",
+        default=False,
+        action="store_true",
+        help="Enable facial emotion monitoring (requires the 'emotion' extra and camera)",
+    )
+    parser.add_argument(
         "--ui",
         default=False,
         action="store_true",

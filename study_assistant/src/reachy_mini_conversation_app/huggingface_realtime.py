@@ -384,7 +384,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         """Start the handler with minimal retries on unexpected websocket closure."""
         self.client = await self._build_realtime_client()
 
-        if self.deps.camera_enabled:
+        if self.deps.camera_enabled and self.deps.emotion_enabled:
             self._emotion_poll_task = asyncio.create_task(self._emotion_poll_loop(), name="emotion-poll")
 
         max_attempts = 3

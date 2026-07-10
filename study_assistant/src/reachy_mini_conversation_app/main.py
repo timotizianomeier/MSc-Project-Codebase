@@ -162,6 +162,7 @@ def run(
         movement_manager=movement_manager,
         instance_path=instance_path,
         camera_enabled=not args.no_camera,
+        emotion_enabled=args.emotion,
     )
 
     def build_handler(startup_voice: Optional[str] = None) -> ConversationHandler:

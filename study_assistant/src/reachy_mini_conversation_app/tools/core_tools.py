@@ -42,6 +42,7 @@ class ToolDependencies:
     # Optional deps
     instance_path: str | Path | None = None
     camera_enabled: bool = False
+    emotion_enabled: bool = False
     motion_duration_s: float = 1.0
     go_to_sleep: Callable[[], dict[str, Any]] | None = None
 
