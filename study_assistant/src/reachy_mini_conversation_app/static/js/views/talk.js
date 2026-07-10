@@ -4,7 +4,7 @@
  * Robot stays live, tapping the orb only mutes or unmutes the user's mic.
  */
 
-import { API_PREFIX, applyPersonality, getMicState, listPersonalities, setMicMuted } from "../api.js";
+import { API_PREFIX, applyPersonality, describeError, getMicState, listPersonalities, sendChat, setMicMuted } from "../api.js";
 import { BUILT_IN_DEFAULT_OPTION, ORB_STATES } from "../constants.js";
 import { createOrb, mapActivityToState } from "../orb.js";
 import { consumePendingApply } from "../pending-apply.js";
@@ -45,11 +45,27 @@ export async function mountTalkView({ outlet, signal }) {
   orb.root.addEventListener("click", onMicTap);
   syncMicAria();
 
+  let chatPending = false;
+  const chatInput = h("input", {
+    type: "text",
+    class: "talk__chat-input",
+    placeholder: "Give Reachy more context about your task",
+    "aria-label": "Add context about your task",
+    autocomplete: "off",
+  });
+  const chatForm = h(
+    "form",
+    { class: "talk__chat", onSubmit: onChatSubmit },
+    chatInput,
+    h("button", { type: "submit", class: "talk__chat-send" }, "Send")
+  );
+
   const view = h(
     "section",
     { class: "view view--talk" },
     h("div", { class: "talk__orb-wrap" }, orb.root),
-    caption
+    caption,
+    chatForm
   );
   outlet.replaceChildren(view);
 
