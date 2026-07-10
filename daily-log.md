@@ -2,6 +2,58 @@
 
 ---
 
+## 📅 [10.07.2026] — Entry #8
+
+### 🎯 Goals for Today
+- UI bit for text input, later potentially further ways for context-ingestion
+- Engagement detector given server hosting model weights is online again
+
+Answer next:
+
+Order of build:
+X Tweak profile to TA, get running
+X Make emotion recognition work, webcam
+- Make engagement detection work, webcam
+WIP Add chat interface for students to interact with and ingest content, use NeetCode as example
+- Improve inattention detection modules
+- Maybe add other bits, eg phone detection
+- Test with robot cam
+- Add external camera, reroute inattention detection modules with these images
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
+- Wifi version does seem a bit smoother than the Lite one
+- Maybe better to first test in simulation
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [09.07.2026] — Entry #7
 
 ### 🎯 Goals for Today
