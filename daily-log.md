@@ -2,6 +2,66 @@
 
 ---
 
+## 📅 [10.07.2026] — Entry #9
+
+### 🎯 Goals for Today
+- Build seperate engagement dection service
+- Wire to thesis repo
+
+### Status by module
+
+Emotion recognition
+- Try different DeepFace backends
+- Try other frameworks
+
+Engagement detecation
+- Get working
+- See if there are other modules
+
+Context awareness
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- For enabling the chat interface next to speech:
+    1. The OpenAI realtime API already supports text input via conversation.item.create — the same call used in send_idle_signal() and _handle_tool_result(). The audio path and text input path are separate, so adding text doesn't require touching the audio plumbing.
+- Wifi version does seem a bit smoother than the Lite one
+- Maybe better to first test in simulation
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [10.07.2026] — Entry #8
 
 ### 🎯 Goals for Today

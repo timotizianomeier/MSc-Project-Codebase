@@ -4,5 +4,6 @@
 .idea/
 __pycache__/
 *.pyc
+*.log
 **/test_assets/
 **/dataset/
