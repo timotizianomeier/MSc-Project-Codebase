@@ -15,7 +15,7 @@ Emotion recognition
 - Try other frameworks
 
 Engagement detecation
-- Get working
+- Class built, not yet wired to server
 - See if there are other modules
 
 Context awareness
@@ -37,10 +37,10 @@ Other
 - 
 
 #### What worked
-- 
+- Built engagement detection class inheriting from intervention monitor and test suite
 
 #### What didn't / open questions
-- 
+- Need to fix local icloud storage issue that corrupts ruff checks, move to local folder not tracked by icloud
 
 #### Random thoughts / ideas
 - For enabling the chat interface next to speech:
@@ -57,7 +57,7 @@ Other
 - 
 
 **Tomorrow:** 
-- 
+- Fix icloud issues, continue building engagement detection, finish it
 
 ---
 ---
