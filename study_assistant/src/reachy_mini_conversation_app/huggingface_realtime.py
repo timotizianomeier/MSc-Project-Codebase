@@ -52,7 +52,7 @@ from reachy_mini_conversation_app.tools.core_tools import (
     ToolDependencies,
     get_tool_specs,
 )
-from reachy_mini_conversation_app.engagement_client import FRAMES_PER_SCORE
+from reachy_mini_conversation_app.engagement_client import FRAMES_PER_SCORE, fetch_engagement_score
 from reachy_mini_conversation_app.emotion_classifier import classify_dominant_emotion
 from reachy_mini_conversation_app.engagement_monitor import EngagementMonitor
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
@@ -68,6 +68,8 @@ logger = logging.getLogger(__name__)
 _RESPONSE_DONE_TIMEOUT: Final[float] = 30.0
 _RESPONSE_REJECTION_RETRY_DELAY: Final[float] = 0.5
 _EMOTION_POLL_INTERVAL_S: Final[float] = 5.0
+_ENGAGEMENT_FRAME_INTERVAL_S: Final[float] = 0.5
+_ENGAGEMENT_SCORE_EVERY_TICKS: Final[int] = 10
 
 
 class InputTranscriptChunksByItem(BaseModel):
@@ -689,6 +691,60 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         if self._emotion_monitor.should_intervene(now, response_done, self.last_activity_time):
             await self._send_emotion_intervention()
             self._emotion_monitor.mark_intervened(now)
+
+    async def _engagement_poll_loop(self) -> None:
+        """Capture frames on a fixed cadence and periodically score the window for disengagement."""
+        tick = 0
+        while True:
+            await asyncio.sleep(_ENGAGEMENT_FRAME_INTERVAL_S)
+            tick += 1
+            try:
+                await self._poll_engagement_once(score_now=(tick % _ENGAGEMENT_SCORE_EVERY_TICKS == 0))
+            except Exception:
+                logger.exception("Engagement poll iteration failed; continuing")
+
+    async def _poll_engagement_once(self, score_now: bool) -> None:
+        """Buffer the current frame and, when due, score the window and gate an intervention."""
+        frame = self.deps.reachy_mini.media.get_frame()
+        if frame is None:
+            logger.debug("Engagement poll: no frame available")
+            return
+        self._engagement_frames.append(frame)
+
+        if not score_now or len(self._engagement_frames) < FRAMES_PER_SCORE or self._engagement_http is None:
+            return
+
+        score = await asyncio.to_thread(fetch_engagement_score, self._engagement_http, list(self._engagement_frames))
+        if score is None:
+            return
+
+        now = time.monotonic()
+        self._engagement_monitor.record(score, now)
+
+        average = self._engagement_monitor.average_score()
+        response_done = self._response_done_event.is_set()
+        interaction_gap = now - self.last_activity_time
+        last_trigger = self._engagement_monitor.last_trigger_time
+        intervention_gap = now - last_trigger if last_trigger is not None else None
+        logger.debug(
+            "Engagement poll: score=%.2f average=%s (need<%.2f) response_done=%s "
+            "interaction_gap=%.1fs (need>%.0fs) intervention_gap=%s (need>%.0fs)",
+            score,
+            f"{average:.2f}" if average is not None else "n/a",
+            self._engagement_monitor.ENGAGEMENT_THRESHOLD,
+            response_done,
+            interaction_gap,
+            self._engagement_monitor.INTERACTION_COOLDOWN_SECONDS,
+            f"{intervention_gap:.1f}s" if intervention_gap is not None else "never",
+            self._engagement_monitor.INTERVENTION_COOLDOWN_SECONDS,
+        )
+
+        if not self._is_connected():
+            logger.debug("Engagement poll: not connected, skipping intervention check")
+            return
+        if self._engagement_monitor.should_intervene(now, response_done, self.last_activity_time):
+            await self._send_engagement_intervention()
+            self._engagement_monitor.mark_intervened(now)
 
     async def _handle_tool_result(self, completed_tool: ToolNotification) -> None:
         """Process the result of a tool call."""
