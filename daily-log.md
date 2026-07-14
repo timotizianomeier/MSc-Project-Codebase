@@ -2,11 +2,10 @@
 
 ---
 
-## 📅 [10.07.2026] — Entry #10
+## 📅 [14.07.2026] — Entry #10
 
 ### 🎯 Goals for Today
 - wire engagemenet detection to thesis repo, test e2e
-
 
 ### Status by module
 
@@ -22,6 +21,10 @@ Context awareness
 - Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
 - Add other ingestion methods, eg PDF
 - Test dfference to local LLM
+
+Local LLM
+- Continue trying different lightweight setups
+- See, as per blogpost, if i could host differently on imperial's cluster
 
 Other
 - Improve TA profile, text different ones
@@ -57,12 +60,13 @@ Other
 - HF backend of conversation module down, try local LLM
 
 **Tomorrow:** 
--
+- Test system E2E for engagement detection
+- Need to figure out lightweight local LLM architecture
 
 ---
 ---
 
-## 📅 [10.07.2026] — Entry #9
+## 📅 [13.07.2026] — Entry #9
 
 ### 🎯 Goals for Today
 - Build seperate engagement dection service
