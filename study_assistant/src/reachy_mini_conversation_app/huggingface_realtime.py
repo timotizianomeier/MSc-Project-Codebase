@@ -39,6 +39,7 @@ from reachy_mini_conversation_app.config import (
 from reachy_mini_conversation_app.prompts import (
     TASK_CONTEXT_PROMPT,
     EMOTION_INTERVENTION_PROMPT,
+    ENGAGEMENT_INTERVENTION_PROMPT,
     get_session_voice,
     get_session_instructions,
     get_session_greeting_prompt,
@@ -504,6 +505,25 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.info("Queued emotion intervention prompt")
         except Exception as e:
             logger.warning("Failed to queue emotion intervention prompt: %s", e)
+
+    async def _send_engagement_intervention(self) -> None:
+        """Prompt the model to re-engage the student after sustained disengagement."""
+        if not self.connection:
+            return
+
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": ENGAGEMENT_INTERVENTION_PROMPT}],
+                },
+            )
+            self._mark_activity("engagement_intervention")
+            await self._safe_response_create()
+            logger.info("Queued engagement intervention prompt")
+        except Exception as e:
+            logger.warning("Failed to queue engagement intervention prompt: %s", e)
 
     async def send_user_text(self, text: str) -> None:
         """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
