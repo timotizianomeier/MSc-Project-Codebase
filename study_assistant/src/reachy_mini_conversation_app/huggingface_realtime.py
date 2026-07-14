@@ -1170,6 +1170,17 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             except asyncio.CancelledError:
                 pass
 
+        if self._engagement_poll_task is not None:
+            self._engagement_poll_task.cancel()
+            try:
+                await self._engagement_poll_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._engagement_http is not None:
+            self._engagement_http.close()
+            self._engagement_http = None
+
         if self.connection:
             try:
                 await self.connection.close()
