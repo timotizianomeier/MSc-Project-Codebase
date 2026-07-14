@@ -2,6 +2,67 @@
 
 ---
 
+## 📅 [10.07.2026] — Entry #10
+
+### 🎯 Goals for Today
+- Fix icloud issues
+- continue building engagement detection, finish it
+- wire to thesis repo, test e2e
+
+
+### Status by module
+
+Emotion recognition
+- Try different DeepFace backends
+- Try other frameworks
+
+Engagement detecation
+- Class built, not yet wired to server
+- See if there are other modules
+
+Context awareness
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+- Test dfference to local LLM
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+-
+
+---
+---
+
 ## 📅 [10.07.2026] — Entry #9
 
 ### 🎯 Goals for Today
