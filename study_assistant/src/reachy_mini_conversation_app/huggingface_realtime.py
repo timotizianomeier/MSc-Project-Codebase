@@ -6,6 +6,7 @@ import random
 import asyncio
 import logging
 from typing import Any, Final, Tuple, Optional
+from collections import deque
 
 import httpx
 import numpy as np
@@ -51,7 +52,9 @@ from reachy_mini_conversation_app.tools.core_tools import (
     ToolDependencies,
     get_tool_specs,
 )
+from reachy_mini_conversation_app.engagement_client import FRAMES_PER_SCORE
 from reachy_mini_conversation_app.emotion_classifier import classify_dominant_emotion
+from reachy_mini_conversation_app.engagement_monitor import EngagementMonitor
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
 from reachy_mini_conversation_app.tools.background_tool_manager import (
     ToolCallRoutine,
@@ -153,6 +156,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         # Emotion recognition: rolling window + the task that samples the camera into it
         self._emotion_monitor = EmotionMonitor()
         self._emotion_poll_task: asyncio.Task[None] | None = None
+
+        # Engagement monitoring: rolling frame window, score history, and the service client
+        self._engagement_monitor = EngagementMonitor()
+        self._engagement_frames: deque[NDArray[np.uint8]] = deque(maxlen=FRAMES_PER_SCORE)
+        self._engagement_http: httpx.Client | None = None
+        self._engagement_poll_task: asyncio.Task[None] | None = None
 
         # Response-in-progress guard: the Realtime API only allows one active
         # response per conversation at a time.  A dedicated worker task
