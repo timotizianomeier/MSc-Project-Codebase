@@ -24,6 +24,12 @@ EMOTION_INTERVENTION_PROMPT = (
     "or a short coping strategy."
 )
 
+ENGAGEMENT_INTERVENTION_PROMPT = (
+    "You've noticed the student seems to have drifted away from their work over the last while. "
+    "Gently check in, ask what's on their mind, and if it fits, help them find a way back "
+    "to the task they were working on."
+)
+
 TASK_CONTEXT_PROMPT = (
     "The student just shared the following as background about the task they're working on. "
     "Briefly acknowledge that you've noted it, and don't solve, explain, or answer it unless they ask."
