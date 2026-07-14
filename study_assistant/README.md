@@ -168,6 +168,7 @@ The app runs in console mode by default. Add `--ui` to also serve a web UI at ht
 |--------|---------|-------------|
 | `--no-camera` | `False` | Run without camera capture. |
 | `--emotion` | `False` | Enable facial emotion monitoring. Requires the camera and the `emotion` dependency extra (`uv sync --extra emotion`). |
+| `--engagement` | `False` | Enable engagement monitoring. Requires the camera and the local engagement-scoring service (see `ENGAGEMENT_SERVICE_URL`). |
 | `--ui` | `False` | Serve the web UI at http://127.0.0.1:7860/, in addition to console mode. |
 | `--robot-name` | `None` | Optional. Connect to a specific robot by name when running multiple daemons on the same subnet. See [Multiple robots on the same subnet](#advanced-features). |
 | `--debug` | `False` | Enable verbose logging for troubleshooting. |
