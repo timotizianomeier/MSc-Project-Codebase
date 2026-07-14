@@ -5,9 +5,7 @@
 ## 📅 [10.07.2026] — Entry #10
 
 ### 🎯 Goals for Today
-- Fix icloud issues
-- continue building engagement detection, finish it
-- wire to thesis repo, test e2e
+- wire engagemenet detection to thesis repo, test e2e
 
 
 ### Status by module
@@ -52,10 +50,11 @@ Other
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Fix icloud issues
+- continue building engagement detection
 
 **Blockers:**
-- 
+- HF backend of conversation module down, try local LLM
 
 **Tomorrow:** 
 -
