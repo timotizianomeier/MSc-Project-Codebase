@@ -42,10 +42,12 @@ Other
 #### What I tried
 - Local LLM setup, connected to desktop app
 - Engagement detection tested e2e
+- Introduced index.md to log app.log debugging statement
 
 #### What worked
 - Engagement detection very robust at first glance
 - Successfully fetched from upstream and resolved any merge conflicts, mainly with regards to JPEG encoding which the SDK now directly takes care of
+- Good first impression of the e2e system test while solving a NeetCode task
 
 #### What didn't / open questions
 - Local LLM setup currently not powerful and stable enough, consider hosting more powerful model on Imperial infra and communication via server
@@ -59,12 +61,14 @@ Other
 **Shipped:** 
 - Engagement detection tested e2e
 - Local LLM v1 working
+- app.log tracking introduced
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Continue testing e2e system with neetcode
+- Prep presentation and demo for Nicole
 
 ---
 ---
