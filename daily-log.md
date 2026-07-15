@@ -5,9 +5,10 @@
 ## 📅 [15.07.2026] — Entry #11
 
 ### 🎯 Goals for Today
-- Test system E2E for engagement detection as soon as HF is back up
-- Need to figure out lightweight local LLM architecture and integrate into coversation app
+X Test system E2E for engagement detection as soon as HF is back up
+X Need to figure out lightweight local LLM architecture and integrate into coversation app
 - Prep meeting with Nicole tomorrow
+- Fetching latest upstream changes, might need more reconciliation vs previously
 
 ### Status by module
 
@@ -39,13 +40,14 @@ Other
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Local LLM setup, connected to desktop app
+- Engagement detection tested e2e
 
 #### What worked
-- 
+- Engagement detection very robust at first glance
 
 #### What didn't / open questions
-- 
+- Local LLM setup currently not powerful and stable enough, consider hosting more powerful model on Imperial infra and communication via server
 
 #### Random thoughts / ideas
 - 
@@ -54,10 +56,11 @@ Other
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Engagement detection tested e2e
+- Local LLM v1 working
 
 **Blockers:**
-- HF backend of conversation module down, try local LLM
+- 
 
 **Tomorrow:** 
 - 
