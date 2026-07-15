@@ -7,8 +7,8 @@
 ### 🎯 Goals for Today
 X Test system E2E for engagement detection as soon as HF is back up
 X Need to figure out lightweight local LLM architecture and integrate into coversation app
+X Fetching latest upstream changes, might need more reconciliation vs previously
 - Prep meeting with Nicole tomorrow
-- Fetching latest upstream changes, might need more reconciliation vs previously
 
 ### Status by module
 
@@ -45,6 +45,7 @@ Other
 
 #### What worked
 - Engagement detection very robust at first glance
+- Successfully fetched from upstream and resolved any merge conflicts, mainly with regards to JPEG encoding which the SDK now directly takes care of
 
 #### What didn't / open questions
 - Local LLM setup currently not powerful and stable enough, consider hosting more powerful model on Imperial infra and communication via server
