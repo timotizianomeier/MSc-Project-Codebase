@@ -4,6 +4,7 @@
 
 ### Log
 
+- [15.07.2026] Pinned opencv-python<5 in the emotion extra (OpenCV 5 wheels dropped the bundled haarcascades deepface's opencv detector loads at runtime). Second instance of the deepface-under-declares-its-needs pattern (tf-keras, 08.07); rule established: any transitive dependency the emotion stack needs at *runtime* gets an explicit pin in our extra, because the 22-test gate deliberately fakes deepface and can't see venv breakage — only a live run can.
 - [14.07.2026] InterventionMonitor as a generic ABC (`Generic[SampleValueT]`) with a `_signal_active()` hook; EmotionMonitor and EngagementMonitor are now thin subclasses — template-method refactor keeps the window/cooldown/response-done gating in one place instead of duplicating it per signal.
 - [14.07.2026] Eviction rule established: requirement expressed in *time* → timestamp-filtered window (engagement scores, 30s average); requirement expressed in *count* → `deque(maxlen)` (engagement frames — the model needs exactly 10, so count is the invariant, not age).
 - [14.07.2026] Two-cadence engagement poll in a single task: frame capture every 0.5s, scoring every 10th tick (~5s) — one tick counter instead of two tasks, and the 0.5s spacing keeps frame timing consistent (temporal spacing affects the model's scores).

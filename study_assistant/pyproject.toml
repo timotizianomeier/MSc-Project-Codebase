@@ -34,6 +34,9 @@ emotion = [
     # deepface's retinaface backend needs this Keras-3 compat shim, but deepface
     # itself doesn't declare it: https://github.com/serengil/retinaface (Keras 3 note).
     "tf-keras",
+    # deepface's opencv detector expects the haarcascade XMLs bundled inside the cv2
+    # wheel, but OpenCV 5.x wheels stopped shipping them and deepface sets no upper bound.
+    "opencv-python>=4.8,<5",
 ]
 
 [dependency-groups]
