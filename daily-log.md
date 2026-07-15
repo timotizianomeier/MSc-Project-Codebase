@@ -2,6 +2,69 @@
 
 ---
 
+## 📅 [15.07.2026] — Entry #11
+
+### 🎯 Goals for Today
+- Test system E2E for engagement detection as soon as HF is back up
+- Need to figure out lightweight local LLM architecture and integrate into coversation app
+- Prep meeting with Nicole tomorrow
+
+### Status by module
+
+Emotion recognition // Make more robust
+- Try different DeepFace backends
+- Try other frameworks
+
+Engagement detecation // Test e2e
+- Class built, not yet wired to server
+- See if there are other modules
+
+Context awareness // 
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+
+Local LLM
+- Continue trying different lightweight setups
+- See, as per blogpost, if i could host differently on imperial's cluster
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- HF backend of conversation module down, try local LLM
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [14.07.2026] — Entry #10
 
 ### 🎯 Goals for Today
