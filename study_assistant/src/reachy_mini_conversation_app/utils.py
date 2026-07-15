@@ -16,6 +16,12 @@ def parse_args() -> tuple[argparse.Namespace, list]:  # type: ignore
         help="Enable facial emotion monitoring (requires the 'emotion' extra and camera)",
     )
     parser.add_argument(
+        "--engagement",
+        default=False,
+        action="store_true",
+        help="Enable engagement monitoring (requires the camera and the local engagement service)",
+    )
+    parser.add_argument(
         "--ui",
         default=False,
         action="store_true",
