@@ -161,7 +161,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         # Engagement monitoring: rolling frame window, score history, and the service client
         self._engagement_monitor = EngagementMonitor()
-        self._engagement_frames: deque[NDArray[np.uint8]] = deque(maxlen=FRAMES_PER_SCORE)
+        self._engagement_frames: deque[bytes] = deque(maxlen=FRAMES_PER_SCORE)
         self._engagement_http: httpx.Client | None = None
         self._engagement_poll_task: asyncio.Task[None] | None = None
 
@@ -712,7 +712,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def _poll_engagement_once(self, score_now: bool) -> None:
         """Buffer the current frame and, when due, score the window and gate an intervention."""
-        frame = self.deps.reachy_mini.media.get_frame()
+        frame = self.deps.reachy_mini.media.get_frame_jpeg()
         if frame is None:
             logger.debug("Engagement poll: no frame available")
             return

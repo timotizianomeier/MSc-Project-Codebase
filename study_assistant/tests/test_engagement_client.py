@@ -1,15 +1,15 @@
 import json
+import base64
 from typing import Any
 
 import httpx
-import numpy as np
 import pytest
 
 from reachy_mini_conversation_app.engagement_client import FRAMES_PER_SCORE, fetch_engagement_score
 
 
-def _dummy_frames(count: int = FRAMES_PER_SCORE) -> list[Any]:
-    return [np.zeros((48, 64, 3), dtype=np.uint8) for _ in range(count)]
+def _dummy_frames(count: int = FRAMES_PER_SCORE) -> list[bytes]:
+    return [f"fake-jpeg-{i}".encode("ascii") for i in range(count)]
 
 
 def test_returns_score_and_sends_contract_shaped_request() -> None:
@@ -29,6 +29,7 @@ def test_returns_score_and_sends_contract_shaped_request() -> None:
     sent_frames = seen["body"]["frames"]
     assert len(sent_frames) == FRAMES_PER_SCORE
     assert all(isinstance(frame, str) for frame in sent_frames)
+    assert base64.b64decode(sent_frames[0]) == b"fake-jpeg-0"
 
 
 def test_wrong_frame_count_returns_none_without_request() -> None:
