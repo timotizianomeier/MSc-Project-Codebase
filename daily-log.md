@@ -5,6 +5,68 @@
 ## 📅 [15.07.2026] — Entry #11
 
 ### 🎯 Goals for Today
+- Continue testing e2e system with neetcode
+- Prep presentation and demo for Nicole
+- Adjust thresholds
+- Do graph of current setup based on pollen graph
+
+### Status by module
+
+Emotion recognition // Robustness
+- Try different DeepFace backends, less priority, probably any of them not super robust
+- Try other frameworks
+
+Engagement detecation // Robustness
+- Check if there are even better modules, text research team Del Duchetto hinted to
+
+Context awareness // 
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+
+Local LLM
+- Maybe try hosting on Imperial cluster
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+-
+
+---
+---
+
+## 📅 [15.07.2026] — Entry #11
+
+### 🎯 Goals for Today
 X Test system E2E for engagement detection as soon as HF is back up
 X Need to figure out lightweight local LLM architecture and integrate into coversation app
 X Fetching latest upstream changes, might need more reconciliation vs previously
