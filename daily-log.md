@@ -8,7 +8,6 @@
 - Continue testing e2e system with neetcode
 - Adjust thresholds
 - Do graph of current setup based on pollen graph
-- Perform upstream sync
 
 ### Status by module
 
@@ -53,7 +52,7 @@ Other
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Performed upstream sync
 
 **Blockers:**
 - 
