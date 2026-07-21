@@ -8,3 +8,4 @@ __pycache__/
 **/test_assets/
 **/dataset/
 logs/frames/
+experiments/**/results_*.txt
