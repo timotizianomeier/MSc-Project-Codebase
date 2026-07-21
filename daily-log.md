@@ -23,7 +23,7 @@ Context awareness //
 - Add other ingestion methods, eg PDF
 
 Local LLM
-- Assess feasability of running on Imperial cluster with Tom
+- Start experimenting with Imperial cluster
 
 Other
 - Improve TA profile, text different ones
@@ -37,7 +37,7 @@ Other
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Assess feasability of running on Imperial cluster with Tom
 
 #### What worked
 - 
@@ -53,12 +53,16 @@ Other
 ### 📦 End of Day Summary
 **Shipped:** 
 - Performed upstream sync
+- Verified opencv backend working well with Laptop webcam and good lighting
+- Benchmarked deepface vs emotiefflib
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
--
+- Swap to emotiefflib
+- Experiment with Imperial cluster for locally hosted LLM configuration
+- Refine engagement detection, potentially add further modalities
 
 ---
 ---
