@@ -2,6 +2,67 @@
 
 ---
 
+## 📅 [21.07.2026] — Entry #11
+
+### 🎯 Goals for Today
+- Continue testing e2e system with neetcode
+- Adjust thresholds
+- Do graph of current setup based on pollen graph
+
+### Status by module
+
+Emotion recognition // Robustness
+- Try other frameworks found, start with HSEmotion
+
+Engagement detecation // Robustness
+- Check if there are even better modules
+- Text research team Del Duchetto hinted to
+
+Context awareness // 
+- Maybe show conversation in browser, check with Nicole, maybe pure ingestion layer also makes sense
+- Add other ingestion methods, eg PDF
+
+Local LLM
+- Assess feasability of running on Imperial cluster with Tom
+
+Other
+- Improve TA profile, text different ones
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+-
+
+---
+---
+
 ## 📅 [16.07.2026] — Entry #11
 
 ### 🎯 Goals for Today
