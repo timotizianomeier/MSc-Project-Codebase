@@ -3,6 +3,8 @@
 import numpy as np
 from numpy.typing import NDArray
 
+from reachy_mini_conversation_app.config import config
+
 
 def classify_dominant_emotion(frame: NDArray[np.uint8]) -> str | None:
     """Return the dominant emotion in a BGR frame, or None when no face is detected."""
@@ -11,7 +13,7 @@ def classify_dominant_emotion(frame: NDArray[np.uint8]) -> str | None:
     from deepface.modules.exceptions import FaceNotDetected
 
     try:
-        faces = DeepFace.analyze(img_path=frame, actions=["emotion"], detector_backend="opencv")
+        faces = DeepFace.analyze(img_path=frame, actions=["emotion"], detector_backend=config.EMOTION_DETECTOR_BACKEND)
     except FaceNotDetected:
         return None
 

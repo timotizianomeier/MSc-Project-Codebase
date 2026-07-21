@@ -6,6 +6,7 @@ import random
 import asyncio
 import logging
 from typing import Any, Final, Tuple, Optional
+from pathlib import Path
 from collections import deque
 
 import httpx
@@ -666,6 +667,19 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             except Exception:
                 logger.exception("Emotion poll iteration failed; continuing")
 
+    def _dump_emotion_frame(self, frame: NDArray[np.uint8], emotion: str | None) -> None:
+        """Save the analyzed frame, named by its result, for post-hoc detector/classifier analysis."""
+        # Imported lazily: cv2 ships with the emotion extra, and the dump only runs alongside it.
+        import cv2
+
+        try:
+            directory = Path(config.EMOTION_FRAME_DUMP_DIR)
+            directory.mkdir(parents=True, exist_ok=True)
+            name = f"{time.strftime('%H%M%S')}_{emotion or 'noface'}.jpg"
+            cv2.imwrite(str(directory / name), frame)
+        except Exception as e:
+            logger.warning("Emotion frame dump failed: %s", e)
+
     async def _poll_emotion_once(self) -> None:
         """Classify the current frame, record it, and send an intervention if warranted."""
         frame = self.deps.reachy_mini.media.get_frame()
@@ -674,6 +688,8 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             return
 
         emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
+        if config.EMOTION_FRAME_DUMP_DIR:
+            await asyncio.to_thread(self._dump_emotion_frame, frame, emotion)
         if emotion is None:
             logger.debug("Emotion poll: no face detected")
             return

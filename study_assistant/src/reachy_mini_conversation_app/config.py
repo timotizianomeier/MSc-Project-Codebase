@@ -306,6 +306,9 @@ class Config:
     REALTIME_TRANSCRIPTION_LANGUAGE = _normalize_transcription_language(os.getenv(REALTIME_TRANSCRIPTION_LANGUAGE_ENV))
     HF_TOKEN = os.getenv("HF_TOKEN")  # Optional, falls back to hf auth login if not set
     ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
+    EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
+    # Directory for per-poll analyzed-frame dumps (empty = disabled).
+    EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
 
     logger.debug(
         "HF mode: %s, HF session URL set: %s, HF direct URL set: %s",
@@ -414,6 +417,8 @@ def refresh_runtime_config_from_env() -> None:
     )
     config.HF_TOKEN = os.getenv("HF_TOKEN")
     config.ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
+    config.EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
+    config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
     config.REACHY_MINI_CUSTOM_PROFILE = LOCKED_PROFILE or os.getenv("REACHY_MINI_CUSTOM_PROFILE")
 
 
