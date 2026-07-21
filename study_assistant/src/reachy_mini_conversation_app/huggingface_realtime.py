@@ -159,6 +159,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         # Emotion recognition: rolling window + the task that samples the camera into it
         self._emotion_monitor = EmotionMonitor()
         self._emotion_poll_task: asyncio.Task[None] | None = None
+        # Per-run subfolder so reruns never mix or overwrite earlier frame dumps.
+        self._emotion_frame_dump_dir: Path | None = (
+            Path(config.EMOTION_FRAME_DUMP_DIR) / time.strftime("%Y-%m-%d_%H%M")
+            if config.EMOTION_FRAME_DUMP_DIR
+            else None
+        )
 
         # Engagement monitoring: rolling frame window, score history, and the service client
         self._engagement_monitor = EngagementMonitor()
@@ -669,14 +675,15 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     def _dump_emotion_frame(self, frame: NDArray[np.uint8], emotion: str | None) -> None:
         """Save the analyzed frame, named by its result, for post-hoc detector/classifier analysis."""
+        if self._emotion_frame_dump_dir is None:
+            return
         # Imported lazily: cv2 ships with the emotion extra, and the dump only runs alongside it.
         import cv2
 
         try:
-            directory = Path(config.EMOTION_FRAME_DUMP_DIR)
-            directory.mkdir(parents=True, exist_ok=True)
+            self._emotion_frame_dump_dir.mkdir(parents=True, exist_ok=True)
             name = f"{time.strftime('%H%M%S')}_{emotion or 'noface'}.jpg"
-            cv2.imwrite(str(directory / name), frame)
+            cv2.imwrite(str(self._emotion_frame_dump_dir / name), frame)
         except Exception as e:
             logger.warning("Emotion frame dump failed: %s", e)
 
@@ -688,7 +695,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             return
 
         emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
-        if config.EMOTION_FRAME_DUMP_DIR:
+        if self._emotion_frame_dump_dir is not None:
             await asyncio.to_thread(self._dump_emotion_frame, frame, emotion)
         if emotion is None:
             logger.debug("Emotion poll: no face detected")
