@@ -1,0 +1,5 @@
+# Git only honors [attr] macro definitions in the top-level .gitattributes.
+# The study_assistant subtree's .gitattributes applies an `lfs` macro to its
+# binary assets (avatars, docs media); defining the macro here makes those
+# attribute lines work monorepo-wide (and silences the per-command warning).
+[attr]lfs -text filter=lfs diff=lfs merge=lfs
