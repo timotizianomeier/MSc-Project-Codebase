@@ -405,14 +405,19 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         """Start the handler with minimal retries on unexpected websocket closure."""
         self.client = await self._build_realtime_client()
 
+        # start_up() is re-entered by the console's retry loop on reconnects; guard so the
+        # poll loops survive instead of being duplicated and orphaned.
         if self.deps.camera_enabled and self.deps.emotion_enabled:
-            self._emotion_poll_task = asyncio.create_task(self._emotion_poll_loop(), name="emotion-poll")
-            logger.info("Emotion monitoring enabled")
+            if self._emotion_poll_task is None or self._emotion_poll_task.done():
+                self._emotion_poll_task = asyncio.create_task(self._emotion_poll_loop(), name="emotion-poll")
+                logger.info("Emotion monitoring enabled")
 
         if self.deps.camera_enabled and self.deps.engagement_enabled:
-            self._engagement_http = httpx.Client()
-            self._engagement_poll_task = asyncio.create_task(self._engagement_poll_loop(), name="engagement-poll")
-            logger.info("Engagement monitoring enabled")
+            if self._engagement_poll_task is None or self._engagement_poll_task.done():
+                if self._engagement_http is None:
+                    self._engagement_http = httpx.Client()
+                self._engagement_poll_task = asyncio.create_task(self._engagement_poll_loop(), name="engagement-poll")
+                logger.info("Engagement monitoring enabled")
 
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
