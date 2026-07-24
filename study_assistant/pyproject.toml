@@ -36,6 +36,9 @@ emotion = [
     # deepface's opencv detector expects the haarcascade XMLs bundled inside the cv2
     # wheel, but OpenCV 5.x wheels stopped shipping them and deepface sets no upper bound.
     "opencv-python>=4.8,<5",
+    # Alternative classifier backend (EMOTION_CLASSIFIER_BACKEND=emotiefflib): AffectNet-trained
+    # EfficientNet, used via its onnx engine (no torch dependency).
+    "emotiefflib",
 ]
 
 [dependency-groups]
