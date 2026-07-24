@@ -699,7 +699,8 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.debug("Emotion poll: no frame available")
             return
 
-        emotion = await asyncio.to_thread(classify_dominant_emotion, frame)
+        classification = await asyncio.to_thread(classify_dominant_emotion, frame)
+        emotion, emotion_scores = classification if classification is not None else (None, None)
         if self._emotion_frame_dump_dir is not None:
             await asyncio.to_thread(self._dump_emotion_frame, frame, emotion)
         if emotion is None:
@@ -715,9 +716,10 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         last_trigger = self._emotion_monitor.last_trigger_time
         intervention_gap = now - last_trigger if last_trigger is not None else None
         logger.debug(
-            "Emotion poll: emotion=%s negative_share=%.2f (need>%.2f) response_done=%s "
+            "Emotion poll: emotion=%s scores=%s negative_share=%.2f (need>%.2f) response_done=%s "
             "interaction_gap=%.1fs (need>%.0fs) intervention_gap=%s (need>%.0fs)",
             emotion,
+            {label: round(score, 2) for label, score in emotion_scores.items()} if emotion_scores else None,
             negative_share,
             self._emotion_monitor.NEGATIVE_THRESHOLD,
             response_done,

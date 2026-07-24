@@ -44,12 +44,15 @@ def test_returns_none_when_no_face_detected(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_picks_dominant_emotion_of_most_confident_face(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With multiple faces, the highest-confidence face's emotion wins."""
+    """With multiple faces, the highest-confidence face's emotion wins; scores come back as 0-1 probabilities."""
     faces = [
-        {"face_confidence": 0.30, "dominant_emotion": "happy"},
-        {"face_confidence": 0.95, "dominant_emotion": "sad"},
+        {"face_confidence": 0.30, "dominant_emotion": "happy", "emotion": {"happy": 80.0, "sad": 20.0}},
+        {"face_confidence": 0.95, "dominant_emotion": "sad", "emotion": {"happy": 25.0, "sad": 75.0}},
     ]
     _install_fake_deepface(monkeypatch, analyze_result=faces)
     frame = np.zeros((4, 4, 3), dtype=np.uint8)
 
-    assert classify_dominant_emotion(frame) == "sad"
+    emotion, scores = classify_dominant_emotion(frame)
+
+    assert emotion == "sad"
+    assert scores == {"happy": 0.25, "sad": 0.75}
