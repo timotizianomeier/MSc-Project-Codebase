@@ -2,10 +2,9 @@
 
 ---
 
-## 📅 [22.07.2026] — Entry #15
+## 📅 [24.07.2026] — Entry #15
 
 ### 🎯 Goals for Today
-- Swap to emotiefflib
 X Check setup on lab machine
 - Continue testing e2e system with neetcode
 - Improve local LLM latency
@@ -45,13 +44,13 @@ Other
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Swap to emotiefflib
 
 #### What worked
 - 
 
 #### What didn't / open questions
-- 
+- "sad" emotion too sensitive to intense studying face on laptop webcam, needs further adjustment 
 
 #### Random thoughts / ideas
 - 
@@ -63,10 +62,10 @@ Other
 - Tried out lab machine setup (yesterday), not ideal (need permission to download Desktop app, USB C not exposed without permission etc.)
 
 **Blockers:**
-- 
+- Swap to emotiefflib
 
 **Tomorrow:** 
--
+- Continue adjusting emotion thresholds, test live
 
 ---
 ---
