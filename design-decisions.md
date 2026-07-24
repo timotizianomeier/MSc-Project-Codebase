@@ -4,6 +4,7 @@
 
 ### Log
 
+- [24.07.2026] Emotion gate switched from label-counting to probability-weighted negative mass (EmotionMonitor now records sum of P(angry,disgust,fear,sad) per poll; mean-over-window > threshold). Threshold made env-configurable (EMOTION_NEGATIVE_THRESHOLD, default 0.40 = behavior-preserving); calibrated value to be established on held-out robot-camera session.
 - [24.07.2026] EmotiEffLib's "contempt" label (AffectNet class, no deepface equivalent) deliberately kept OUT of NEGATIVE_EMOTIONS: eyeballing the two frames it flagged (144826/144832, 21.07 session) showed down-gaze concentration with pressed lips — a focused-work artifact, same family as the down-gaze→sadness bias, not genuine negative affect. Label survives normalization (visible in dumps/logs) but never votes for intervention.
 - [21.07.2026] Upstream #455 (REST/SSE → JSON-RPC at /rpc) absorbed; text-context feature ported as `conversation.context` in upstream's `conversation.say` idiom. Deliberate divergence from `say`: no `clear_audio_queue()` — a context drop must not barge in on live speech.
 - [21.07.2026] `send_user_text` now delegates to upstream's `say()` (they independently built the same injection mechanics); mine keeps only the TASK_CONTEXT_PROMPT framing, soft-fail logging, and the distinct `user_text_input` activity reason. Shrinks the permanent upstream diff.

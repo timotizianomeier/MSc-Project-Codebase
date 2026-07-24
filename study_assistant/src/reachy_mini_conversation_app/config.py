@@ -308,6 +308,9 @@ class Config:
     ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
     EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    # Windowed negative-mass threshold for emotion interventions (gate simulation 24.07:
+    # backend-dependent calibration; emotiefflib's soft distributions want ~0.55).
+    EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     # Directory for per-poll analyzed-frame dumps (empty = disabled).
     EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
 
@@ -420,6 +423,7 @@ def refresh_runtime_config_from_env() -> None:
     config.ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     config.EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
     config.EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
     config.REACHY_MINI_CUSTOM_PROFILE = LOCKED_PROFILE or os.getenv("REACHY_MINI_CUSTOM_PROFILE")
 

@@ -8,5 +8,5 @@ __pycache__/
 **/test_assets/
 **/dataset/
 logs/frames/
-experiments/**/results_*.txt
+experiments/**/results_*
 imperial-gpu-cluster.md

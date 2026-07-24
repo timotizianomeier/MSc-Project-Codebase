@@ -47,7 +47,7 @@ from reachy_mini_conversation_app.prompts import (
     get_session_greeting_prompt,
 )
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16
-from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor
+from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor, negative_mass
 from reachy_mini_conversation_app.tools.core_tools import (
     ToolSpec,
     ToolDependencies,
@@ -157,7 +157,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         self.tool_manager = BackgroundToolManager()
 
         # Emotion recognition: rolling window + the task that samples the camera into it
-        self._emotion_monitor = EmotionMonitor()
+        self._emotion_monitor = EmotionMonitor(config.EMOTION_NEGATIVE_THRESHOLD)
         self._emotion_poll_task: asyncio.Task[None] | None = None
         # Per-run subfolder so reruns never mix or overwrite earlier frame dumps.
         self._emotion_frame_dump_dir: Path | None = (
@@ -708,7 +708,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             return
 
         now = time.monotonic()
-        self._emotion_monitor.record(emotion, now)
+        self._emotion_monitor.record(negative_mass(emotion_scores), now)
 
         negative_share = self._emotion_monitor.negative_share()
         response_done = self._response_done_event.is_set()
