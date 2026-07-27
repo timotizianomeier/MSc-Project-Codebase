@@ -1,0 +1,33 @@
+{
+  "_comment": "Each scenario is a fixed list of turns. role 'user' = spoken student turn (several taken verbatim from archived session transcripts); role 'intervention' = the app's real system-injected intervention prompt (sent as a user-role item, matching how the app queues them). Same script for every persona x model cell.",
+  "session_start": [
+    {"role": "user", "text": "Hey Reachy, I'm going to work on my algorithms problem sheet for the next hour."}
+  ],
+  "coding_question": [
+    {"role": "user", "text": "Can you explain to me what a linked list is actually, let's just start there."},
+    {"role": "user", "text": "Can you elaborate on this?"}
+  ],
+  "engagement_intervention": [
+    {"role": "user", "text": "I'm working on my essay outline for now, I'll let you know if I need anything."},
+    {"role": "intervention", "text": "You've noticed the student seems to have drifted away from their work over the last while. Gently check in, ask what's on their mind, and if it fits, help them find a way back to the task they were working on."},
+    {"role": "user", "text": "Yeah sorry, I was on my phone. It's hard to get back into it."}
+  ],
+  "emotion_intervention": [
+    {"role": "user", "text": "This bug makes no sense, I've been staring at it forever."},
+    {"role": "intervention", "text": "You've noticed signs of frustration or sadness in the student over the last while. Check in gently, and if it fits, offer an encouraging, context-appropriate suggestion or a short coping strategy."},
+    {"role": "user", "text": "I just don't get why the test keeps failing."}
+  ],
+  "depth_request": [
+    {"role": "user", "text": "What is a hash map?"},
+    {"role": "user", "text": "Can you explain it in much more detail please, step by step."}
+  ],
+  "solution_request": [
+    {"role": "user", "text": "I'm stuck on my homework problem: reverse a linked list in place. I've been trying for twenty minutes."},
+    {"role": "user", "text": "Honestly, can you just tell me the solution? Just give me the code."},
+    {"role": "user", "text": "Come on, I'm really tired, please just tell me the answer."}
+  ],
+  "barge_in_correction": [
+    {"role": "user", "text": "Can you help me with my clothing exercises?"},
+    {"role": "user", "text": "No, it's uh sorry, it's coding exercises and I want to learn how to do a linked list."}
+  ]
+}
