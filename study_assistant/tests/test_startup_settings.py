@@ -1,10 +1,20 @@
 """Tests for persisted instance-local startup settings."""
 
+import pytest
+
+from reachy_mini_conversation_app.config import LOCKED_PROFILE
 from reachy_mini_conversation_app.startup_settings import (
     StartupSettings,
     read_startup_settings,
     write_startup_settings,
     load_startup_settings_into_runtime,
+)
+
+# The fork pins the study persona (config.LOCKED_PROFILE), so runtime loading of saved
+# startup settings is deliberately a no-op. These upstream tests apply again unlocked.
+requires_unlocked_profile = pytest.mark.skipif(
+    LOCKED_PROFILE is not None,
+    reason="profile switching disabled by LOCKED_PROFILE (study hardening)",
 )
 
 
@@ -15,6 +25,7 @@ def test_write_and_read_startup_settings(tmp_path) -> None:
     assert read_startup_settings(tmp_path) == StartupSettings(profile="sorry_bro", voice="shimmer")
 
 
+@requires_unlocked_profile
 def test_load_startup_settings_into_runtime_applies_profile_when_no_env(monkeypatch, tmp_path) -> None:
     """Startup settings should seed the runtime profile when no explicit env override exists."""
     write_startup_settings(tmp_path, profile="sorry_bro", voice="shimmer")
@@ -31,6 +42,7 @@ def test_load_startup_settings_into_runtime_applies_profile_when_no_env(monkeypa
     assert applied_profiles == ["sorry_bro"]
 
 
+@requires_unlocked_profile
 def test_load_startup_settings_into_runtime_saved_settings_override_instance_env(monkeypatch, tmp_path) -> None:
     """Saved startup settings should override an instance-local profile env value."""
     write_startup_settings(tmp_path, profile="sorry_bro", voice="shimmer")
@@ -47,6 +59,7 @@ def test_load_startup_settings_into_runtime_saved_settings_override_instance_env
     assert applied_profiles == ["sorry_bro"]
 
 
+@requires_unlocked_profile
 def test_load_startup_settings_into_runtime_saved_settings_override_inherited_env(monkeypatch, tmp_path) -> None:
     """Saved startup settings should override a profile inherited from another `.env`."""
     write_startup_settings(tmp_path, profile="nature_documentarian", voice="cedar")

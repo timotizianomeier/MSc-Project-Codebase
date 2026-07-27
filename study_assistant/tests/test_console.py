@@ -12,7 +12,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from reachy_mini_conversation_app.config import HF_AVAILABLE_VOICES, config
+from reachy_mini_conversation_app.config import HF_AVAILABLE_VOICES, LOCKED_PROFILE, config
 from reachy_mini_conversation_app.console import LocalStream
 from reachy_mini_conversation_app.startup_settings import (
     StartupSettings,
@@ -21,6 +21,13 @@ from reachy_mini_conversation_app.startup_settings import (
 from reachy_mini_conversation_app.personality_routes import (
     RouteError,
     build_personality_ops,
+)
+
+# The fork pins the study persona (config.LOCKED_PROFILE), deliberately disabling the
+# profile-switching machinery these upstream tests exercise. They apply again unlocked.
+requires_unlocked_profile = pytest.mark.skipif(
+    LOCKED_PROFILE is not None,
+    reason="profile switching disabled by LOCKED_PROFILE (study hardening)",
 )
 
 
@@ -562,6 +569,7 @@ async def test_personality_ops_apply_voice() -> None:
     handler.change_voice.assert_awaited_once_with("cedar")
 
 
+@requires_unlocked_profile
 @pytest.mark.asyncio
 async def test_personality_ops_persist_startup_with_voice_override() -> None:
     """Applying with persist=True saves the active manual voice override."""
@@ -578,6 +586,7 @@ async def test_personality_ops_persist_startup_with_voice_override() -> None:
     persist_personality.assert_called_once_with("sorry_bro", "shimmer")
 
 
+@requires_unlocked_profile
 @pytest.mark.asyncio
 async def test_personality_ops_apply_same_profile_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-applying the active personality is a no-op for the realtime handler."""
@@ -612,6 +621,7 @@ def test_personality_ops_startup_choice_survives_runtime_change(
     assert second["startup"] == "captain_circuit"
 
 
+@requires_unlocked_profile
 @pytest.mark.asyncio
 async def test_personality_ops_use_apply_callback() -> None:
     """Apply delegates to the injected apply_personality callback, not the handler."""
@@ -669,6 +679,7 @@ async def test_local_stream_change_voice_delegates_without_backend_restart() -> 
     assert not stream._restart_requested.is_set()
 
 
+@requires_unlocked_profile
 def test_local_stream_persist_personality_stores_voice_override(tmp_path) -> None:
     """Persisting startup settings should write both profile and voice override."""
     stream = LocalStream(MagicMock(), MagicMock(), instance_path=str(tmp_path))
@@ -681,6 +692,7 @@ def test_local_stream_persist_personality_stores_voice_override(tmp_path) -> Non
     assert stream._read_persisted_personality() == "sorry_bro"
 
 
+@requires_unlocked_profile
 def test_local_stream_persist_personality_clears_legacy_startup_env_overrides(tmp_path, monkeypatch) -> None:
     """Saving startup settings should remove legacy `.env` profile and voice overrides."""
     env_path = tmp_path / ".env"

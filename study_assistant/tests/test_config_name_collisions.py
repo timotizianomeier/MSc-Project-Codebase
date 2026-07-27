@@ -4,7 +4,15 @@ import pytest
 
 import reachy_mini_conversation_app.config as config_mod
 
+# The fork pins the study persona (config.LOCKED_PROFILE); Config.__init__ then rejects any
+# profiles root missing that profile before collision detection runs. Applies again unlocked.
+requires_unlocked_profile = pytest.mark.skipif(
+    config_mod.LOCKED_PROFILE is not None,
+    reason="profile resolution short-circuited by LOCKED_PROFILE (study hardening)",
+)
 
+
+@requires_unlocked_profile
 def test_config_raises_on_external_profile_name_collision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Config should fail fast when external/built-in profile names collide."""
     external_profiles = tmp_path / "external_profiles"
@@ -18,6 +26,7 @@ def test_config_raises_on_external_profile_name_collision(tmp_path: Path, monkey
         config_mod.Config()
 
 
+@requires_unlocked_profile
 def test_config_raises_on_external_profile_name_collision_with_builtin_alias(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
