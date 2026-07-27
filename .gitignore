@@ -10,3 +10,4 @@ __pycache__/
 logs/frames/
 experiments/**/results_*
 imperial-gpu-cluster.md
+study_llm.sbatch

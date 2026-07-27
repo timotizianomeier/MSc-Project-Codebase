@@ -5,9 +5,9 @@
 ## 📅 [27.07.2026] — Entry #16
 
 ### 🎯 Goals for Today
-- Continue testing e2e system with neetcode
-- Improve local LLM latency
-- Try out larger model (see benchmarks)
+X Continue testing e2e system with neetcode
+X Improve local LLM latency
+X Try out larger model (see benchmarks)
 
 Later
 - Refine engagement detection, potentially add further modalities
@@ -43,7 +43,7 @@ Other
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- Continue testing e2e system with neetcode
 
 #### What worked
 - 
@@ -58,13 +58,17 @@ Other
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Pulled from upstream (yesterday)
+- Improve local LLM latency
+- Benchmarked different LLMs
 
 **Blockers:**
-- 
+- Mac STT thermal issues, try again with robot and less parallel tasks open
 
 **Tomorrow:** 
-- 
+- Try again local LLM setups, else revert to HF hosting
+- Try different LLMs
+- Starting building UI layer for participants to work from their own machines
 
 ---
 ---
