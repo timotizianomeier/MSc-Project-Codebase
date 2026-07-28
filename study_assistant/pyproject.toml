@@ -26,9 +26,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Opt-in facial emotion recognition. Pulls in a heavy ML stack (TensorFlow),
-# so it is kept out of the base install: `uv sync --extra emotion`.
-emotion = [
+# Opt-in facial emotion recognition, split per classifier backend so constrained hosts
+# (e.g. the robot's Pi CM4, 16GB eMMC) can install emotiefflib without the ~2.5GB
+# TensorFlow stack: `uv sync --extra emotion-emotiefflib`. Dev machines that want the
+# deepface/emotiefflib A/B use `--extra emotion-all`.
+emotion-deepface = [
     "deepface",
     # deepface's retinaface backend needs this Keras-3 compat shim, but deepface
     # itself doesn't declare it: https://github.com/serengil/retinaface (Keras 3 note).
@@ -36,8 +38,17 @@ emotion = [
     # deepface's opencv detector expects the haarcascade XMLs bundled inside the cv2
     # wheel, but OpenCV 5.x wheels stopped shipping them and deepface sets no upper bound.
     "opencv-python>=4.8,<5",
-    # Alternative classifier backend (EMOTION_CLASSIFIER_BACKEND=emotiefflib): AffectNet-trained
-    # EfficientNet, used via its onnx engine (no torch dependency).
+]
+# EMOTION_CLASSIFIER_BACKEND=emotiefflib: AffectNet-trained EfficientNet via its onnx
+# engine (no torch dependency); same opencv pin for the shared haarcascade detector.
+emotion-emotiefflib = [
+    "emotiefflib",
+    "opencv-python>=4.8,<5",
+]
+emotion-all = [
+    "deepface",
+    "tf-keras",
+    "opencv-python>=4.8,<5",
     "emotiefflib",
 ]
 

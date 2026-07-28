@@ -3366,11 +3366,20 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-emotion = [
+emotion-all = [
     { name = "deepface" },
     { name = "emotiefflib" },
     { name = "opencv-python" },
     { name = "tf-keras" },
+]
+emotion-deepface = [
+    { name = "deepface" },
+    { name = "opencv-python" },
+    { name = "tf-keras" },
+]
+emotion-emotiefflib = [
+    { name = "emotiefflib" },
+    { name = "opencv-python" },
 ]
 
 [package.dev-dependencies]
@@ -3386,19 +3395,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deepface", marker = "extra == 'emotion'" },
-    { name = "emotiefflib", marker = "extra == 'emotion'" },
+    { name = "deepface", marker = "extra == 'emotion-all'" },
+    { name = "deepface", marker = "extra == 'emotion-deepface'" },
+    { name = "emotiefflib", marker = "extra == 'emotion-all'" },
+    { name = "emotiefflib", marker = "extra == 'emotion-emotiefflib'" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "huggingface-hub", specifier = ">=1.17.0" },
     { name = "mcp", specifier = ">=1.27.1" },
     { name = "openai", specifier = "==2.28.0" },
-    { name = "opencv-python", marker = "extra == 'emotion'", specifier = ">=4.8,<5" },
+    { name = "opencv-python", marker = "extra == 'emotion-all'", specifier = ">=4.8,<5" },
+    { name = "opencv-python", marker = "extra == 'emotion-deepface'", specifier = ">=4.8,<5" },
+    { name = "opencv-python", marker = "extra == 'emotion-emotiefflib'", specifier = ">=4.8,<5" },
     { name = "python-dotenv" },
     { name = "reachy-mini", specifier = ">=1.10.0rc2" },
     { name = "reachy-mini-dances-library" },
-    { name = "tf-keras", marker = "extra == 'emotion'" },
+    { name = "tf-keras", marker = "extra == 'emotion-all'" },
+    { name = "tf-keras", marker = "extra == 'emotion-deepface'" },
 ]
-provides-extras = ["emotion"]
+provides-extras = ["emotion-deepface", "emotion-emotiefflib", "emotion-all"]
 
 [package.metadata.requires-dev]
 dev = [
