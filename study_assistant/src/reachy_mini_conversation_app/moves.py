@@ -39,6 +39,7 @@ from reachy_mini import ReachyMini
 from reachy_mini.utils import create_head_pose
 from reachy_mini.motion.move import Move
 from reachy_mini.utils.interpolation import compose_world_offset, linear_pose_interpolation
+from reachy_mini_conversation_app.config import config
 from reachy_mini_conversation_app.dance_emotion_moves import EmotionQueueMove
 
 
@@ -426,6 +427,8 @@ class MovementManager:
 
     def _manage_breathing(self, current_time: float) -> None:
         """Manage automatic breathing when idle."""
+        if not config.BREATHING_ENABLED:
+            return
         if (
             self.state.current_move is None
             and not self.move_queue

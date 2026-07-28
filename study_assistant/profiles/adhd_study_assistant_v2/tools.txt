@@ -1,8 +1,9 @@
 # Available tools for this profile, remove comments to activate them
 # or use 'all' to enable all built-in tools
 
-dance
-stop_dance
+# dance/stop_dance disabled for study sessions (design 28.07): no spectacle during focused work
+#dance
+#stop_dance
 play_emotion
 stop_emotion
 #camera

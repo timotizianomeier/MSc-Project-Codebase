@@ -308,6 +308,10 @@ class Config:
     ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
     EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    # Unprompted-motion knobs, DEFAULT OFF (study-first: minimize distraction, stabilize
+    # camera frames). Set to 1 to restore the stock idle behaviors.
+    IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)
+    BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
     # Windowed negative-mass threshold for emotion interventions (gate simulation 24.07:
     # backend-dependent calibration; emotiefflib's soft distributions want ~0.55).
     EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
@@ -423,6 +427,8 @@ def refresh_runtime_config_from_env() -> None:
     config.ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     config.EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
     config.EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    config.IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)
+    config.BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
     config.REACHY_MINI_CUSTOM_PROFILE = LOCKED_PROFILE or os.getenv("REACHY_MINI_CUSTOM_PROFILE")

@@ -4,6 +4,8 @@
 
 ### Log
 
+- [28.07.2026] Conversational breathing: with breathing now off by default, consider re-enabling it only WHILE the student is speaking (+ ~10s tail after the interaction ends) — liveliness during interaction, stillness during focused work. Would hook the mic/VAD state into moves' breathing manager instead of the current inactivity timer.
+- [28.07.2026] Lab-machine test paused (user may run study on own laptop); revisit only if the laptop route fails.
 - [21.07.2026] EmotiEffLib can also do engagement detection, benchmark against Del Duchetto
 - [14.07.2026] If local models are too taxing, figure out if there is a way to host them on Imperial's cluster and somehow make them communicate via server
 - [10.07.2026] Maybe make user ingested text durable context leveraging remember, especially if long sessions seem to time out / run out of context after a while
