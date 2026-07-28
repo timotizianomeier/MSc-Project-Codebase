@@ -39,6 +39,11 @@ Other
 - Save study files
 - Be wireless and Lite ready
 
+Participant window
+- Session timer
+- mute option
+- pause / end option
+
 ---
 
 ### 🔬 Findings & Notes

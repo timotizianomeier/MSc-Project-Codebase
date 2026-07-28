@@ -34,14 +34,18 @@
         min-height: 7rem;
         resize: vertical;
       }
+      .participant__input::placeholder {
+        font-style: italic;
+      }
       /* style.css lays the chat form out as a row; stack it so the button sits below. */
       .participant .talk__chat {
         flex-direction: column;
         align-items: stretch;
       }
       .participant__send {
-        align-self: flex-end;
-        padding: 0.65rem 1.5rem;
+        align-self: stretch;
+        padding: 0.75rem 1.5rem;
+        font-size: 1.1rem;
       }
       .participant__status {
         min-height: 1.5rem;
@@ -57,14 +61,15 @@
       </div>
       <h1>Share your task with Reachy</h1>
       <p class="participant__hint">
-        Tell Reachy what you are working on in this session, for example the exercise, reading,
-        or problem set in front of you. Reachy will keep it in mind. You can send updates any time.
+        Give Reachy more context about what you are working on.<br />
+        Simply copy + paste the exercise, reading, or problem set.<br />
+        Reachy will keep it in mind. You can send updates any time.
       </p>
       <form id="context-form" class="talk__chat">
         <textarea
           id="context-input"
           class="talk__chat-input participant__input"
-          placeholder="e.g. I'm working through problem sheet 3 on graph algorithms, starting with question 2."
+          placeholder="e.g. I'm working on the following coding exercise: Given an integer array nums and an integer k, return the k most frequent elements within the array."
           autocomplete="off"
         ></textarea>
         <button type="submit" id="context-send" class="participant__send">Send to Reachy</button>
@@ -91,7 +96,7 @@
         try {
           await sendChat(text);
           input.value = "";
-          status.textContent = "✓ Reachy has your context.";
+          status.textContent = "✓ Reachy has received your context.";
         } catch (error) {
           status.textContent = `Could not send, please try again. (${describeError(error)})`;
         } finally {
