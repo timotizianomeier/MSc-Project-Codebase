@@ -567,6 +567,12 @@ class LocalStream:
         def _root() -> FileResponse:
             return FileResponse(str(index_file))
 
+        # GET /participant -> stripped context-entry page for study participants on the LAN.
+        # The full UI stays reachable at / (accepted risk: supervised sessions, design 28.07).
+        @settings_app.get("/participant")
+        def _participant() -> FileResponse:
+            return FileResponse(str(static_dir / "participant.html"))
+
         # GET /favicon.ico -> optional, avoid noisy 404s on some browsers
         @settings_app.get("/favicon.ico")
         def _favicon() -> Response:
