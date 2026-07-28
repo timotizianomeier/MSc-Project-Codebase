@@ -5,16 +5,15 @@
 ## 📅 [28.07.2026] — Entry #17
 
 ### 🎯 Goals for Today
-- Continue testing e2e system with neetcode
+X Continue testing e2e system with neetcode
 - Try again local LLM setups, else revert to HF hosting
 - Try different LLMs
-- Starting building UI layer for participants to work from their own machines
+X Starting building UI layer for participants to work from their own machines
 
 Later
 - Refine engagement detection, potentially add further modalities
 - Adjust thresholds
 - Do graph of current setup based on pollen graph
-- Figure out UI setup on participant machine
 
 ### Status by module
 
@@ -65,13 +64,16 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Permanent hosting of LLM on cluster
+- Got rid of distracting robot movements
+- Added participant frontend
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
--
+- Live testing (thresholds, LLM latency etc.)
+- Write code o save audio & video
 
 ---
 ---
