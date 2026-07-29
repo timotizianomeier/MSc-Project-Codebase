@@ -317,6 +317,9 @@ class Config:
     EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     # Directory for per-poll analyzed-frame dumps (empty = disabled).
     EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
+    # Root for full-session A/V recording (empty = disabled): per-run folder with
+    # user/robot WAV tracks + engagement-cadence camera frames (ethics-approved capture).
+    SESSION_RECORDING_DIR = os.getenv("SESSION_RECORDING_DIR", "")
 
     logger.debug(
         "HF mode: %s, HF session URL set: %s, HF direct URL set: %s",
@@ -431,6 +434,7 @@ def refresh_runtime_config_from_env() -> None:
     config.BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
+    config.SESSION_RECORDING_DIR = os.getenv("SESSION_RECORDING_DIR", "")
     config.REACHY_MINI_CUSTOM_PROFILE = LOCKED_PROFILE or os.getenv("REACHY_MINI_CUSTOM_PROFILE")
 
 

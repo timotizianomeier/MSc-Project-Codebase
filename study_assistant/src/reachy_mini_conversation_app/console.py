@@ -37,6 +37,7 @@ from reachy_mini_conversation_app.config import (
     refresh_runtime_config_from_env,
 )
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_float32
+from reachy_mini_conversation_app.session_recorder import get_recorder
 from reachy_mini_conversation_app.startup_settings import read_startup_settings, write_startup_settings
 from reachy_mini_conversation_app.tools.core_tools import initialize_tools
 from reachy_mini_conversation_app.personality_routes import (
@@ -811,6 +812,10 @@ class LocalStream:
             finally:
                 # Ensure handler connection is closed
                 await self.handler.shutdown()
+                # Finalize the session A/V record (WAV headers are written on close).
+                session_recorder = get_recorder()
+                if session_recorder is not None:
+                    session_recorder.close()
 
         asyncio.run(runner())
 
@@ -881,16 +886,20 @@ class LocalStream:
         """Read mic frames from the recorder and forward them to the handler."""
         input_sample_rate = self._robot.media.get_input_audio_samplerate()
         logger.debug(f"Audio recording started at {input_sample_rate} Hz")
+        session_recorder = get_recorder()
 
         while not self._stop_event.is_set():
             audio_frame = self._robot.media.get_audio_sample()
             if audio_frame is not None and not self._mic_muted:
                 await self.handler.receive((input_sample_rate, audio_frame))
+                if session_recorder is not None:
+                    session_recorder.write_user_audio(input_sample_rate, audio_frame)
                 self._emit_level("user", audio_frame)
             await asyncio.sleep(0)  # avoid busy loop
 
     async def play_loop(self) -> None:
         """Fetch outputs from the handler: log text and play audio frames."""
+        session_recorder = get_recorder()
         while not self._stop_event.is_set():
             handler = self.handler
             try:
@@ -909,7 +918,7 @@ class LocalStream:
                         )
 
             elif isinstance(handler_output, tuple):
-                _, audio_data = handler_output
+                output_sample_rate, audio_data = handler_output
 
                 # Skip empty audio frames
                 if audio_data.size == 0:
@@ -928,6 +937,8 @@ class LocalStream:
                 audio_frame = audio_to_float32(audio_data)
 
                 self._robot.media.push_audio_sample(audio_frame)
+                if session_recorder is not None:
+                    session_recorder.write_robot_audio(output_sample_rate, audio_data)
                 self._emit_level("assistant", audio_frame)
 
             elif handler_output is not None:

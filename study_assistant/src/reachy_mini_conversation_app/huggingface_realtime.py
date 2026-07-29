@@ -48,6 +48,7 @@ from reachy_mini_conversation_app.prompts import (
 )
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16
 from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor, negative_mass
+from reachy_mini_conversation_app.session_recorder import get_recorder
 from reachy_mini_conversation_app.tools.core_tools import (
     ToolSpec,
     ToolDependencies,
@@ -758,6 +759,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.debug("Engagement poll: no frame available")
             return
         self._engagement_frames.append(frame)
+        # Tee the same JPEG into the session A/V record (study data collection). This
+        # rides the engagement cadence (2 fps), so video recording requires the
+        # engagement poll to be running (camera + engagement enabled).
+        session_recorder = get_recorder()
+        if session_recorder is not None:
+            await asyncio.to_thread(session_recorder.write_video_frame, frame)
 
         if not score_now or len(self._engagement_frames) < FRAMES_PER_SCORE or self._engagement_http is None:
             return
