@@ -8,6 +8,7 @@ __pycache__/
 **/test_assets/
 **/dataset/
 logs/frames/
+logs/recordings/
 experiments/**/results_*
 imperial-gpu-cluster.md
 study_llm.sbatch
