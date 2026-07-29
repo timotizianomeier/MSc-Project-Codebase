@@ -9,7 +9,6 @@ X Continue testing e2e system with neetcode
 - Try again local LLM setups, else revert to HF hosting
 - Try different LLMs
 - Live testing (thresholds, LLM latency etc.)
-- Write code to save audio & video
 
 Later
 - Refine engagement detection, potentially add further modalities
@@ -50,7 +49,7 @@ Participant window
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- SSH setup on Reachy, didn't finish
 
 #### What worked
 - 
@@ -65,13 +64,14 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Write code to save audio & video
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- No robot assistance condition
+- Try SSH setup
 
 ---
 ---
