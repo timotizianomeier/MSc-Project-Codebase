@@ -52,12 +52,14 @@ Participant window
 
 #### What I tried
 - Merging latest changes fromn upstream
+- Live testing for LLM latency
 
 #### What worked
 - No robot assistance condition
 
 #### What didn't / open questions
 - Upstream changes to extensive and not relevant to study setup, disregard until post study and potentially even post presentation demo, not worth it
+- Thermal issues with VAD / STT / TTS on Mac, try swapping modules
 
 #### Random thoughts / ideas
 - 
@@ -67,12 +69,14 @@ Participant window
 ### 📦 End of Day Summary
 **Shipped:** 
 - No robot assistance control condition
+- A lot of experimentation around the hosted LLM
 
 **Blockers:**
 - Upstream changes, disregard for now
 
 **Tomorrow:** 
-- 
+- Wireless trial
+- Hosted LLM refinement
 
 ---
 ---
