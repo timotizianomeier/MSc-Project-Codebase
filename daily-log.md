@@ -2,6 +2,81 @@
 
 ---
 
+## 📅 [30.07.2026] — Entry #18
+
+### 🎯 Goals for Today
+X Continue testing e2e system with neetcode
+- No robot assistance condition
+- Try SSH setup
+- Try again local LLM setups, else revert to HF hosting
+- Try different LLMs
+- Live testing (thresholds, LLM latency etc.)
+
+Later
+- Refine engagement detection, potentially add further modalities
+- Adjust thresholds
+- Do graph of current setup based on pollen graph
+
+### Status by module
+
+Emotion recognition
+- Calibrate threshold
+
+Engagement detecation
+- Calibrate threshold
+
+Context awareness
+- Frontend accessible from participant machine
+- Maybe display chat
+- Maybe further ingestion possibilities
+
+Local LLM
+- Test robustness
+
+Other
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+- Save study files
+- Be wireless and Lite ready
+
+Participant window
+- Session timer
+- mute option
+- pause / end option
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- SSH setup on Reachy, didn't finish
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [29.07.2026] — Entry #18
 
 ### 🎯 Goals for Today
