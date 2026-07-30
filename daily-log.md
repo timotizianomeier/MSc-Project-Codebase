@@ -6,7 +6,7 @@
 
 ### 🎯 Goals for Today
 X Continue testing e2e system with neetcode
-- No robot assistance condition
+X No robot assistance condition
 - Try SSH setup
 - Try again local LLM setups, else revert to HF hosting
 - Try different LLMs
@@ -54,7 +54,7 @@ Participant window
 - Merging latest changes fromn upstream
 
 #### What worked
-- 
+- No robot assistance condition
 
 #### What didn't / open questions
 - Upstream changes to extensive and not relevant to study setup, disregard until post study and potentially even post presentation demo, not worth it
@@ -66,10 +66,10 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- No robot assistance control condition
 
 **Blockers:**
-- 
+- Upstream changes, disregard for now
 
 **Tomorrow:** 
 - 
