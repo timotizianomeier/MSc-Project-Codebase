@@ -891,9 +891,12 @@ class LocalStream:
         while not self._stop_event.is_set():
             audio_frame = self._robot.media.get_audio_sample()
             if audio_frame is not None and not self._mic_muted:
-                await self.handler.receive((input_sample_rate, audio_frame))
+                # Recorder tee BEFORE the control gate: control sessions still record
+                # the participant; the model just never hears them.
                 if session_recorder is not None:
                     session_recorder.write_user_audio(input_sample_rate, audio_frame)
+                if not config.CONTROL_MODE:
+                    await self.handler.receive((input_sample_rate, audio_frame))
                 self._emit_level("user", audio_frame)
             await asyncio.sleep(0)  # avoid busy loop
 

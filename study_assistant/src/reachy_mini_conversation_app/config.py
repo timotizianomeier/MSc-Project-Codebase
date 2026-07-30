@@ -320,6 +320,11 @@ class Config:
     # Root for full-session A/V recording (empty = disabled): per-run folder with
     # user/robot WAV tracks + engagement-cadence camera frames (ethics-approved capture).
     SESSION_RECORDING_DIR = os.getenv("SESSION_RECORDING_DIR", "")
+    # Study control condition (usually set via the --control CLI flag): sensing runs
+    # normally but every robot output is gated. Deliberately NOT re-read in
+    # refresh_runtime_config_from_env — a UI settings save must never flip the
+    # experimental condition mid-session.
+    CONTROL_MODE = _env_flag("CONTROL_MODE", default=False)
 
     logger.debug(
         "HF mode: %s, HF session URL set: %s, HF direct URL set: %s",

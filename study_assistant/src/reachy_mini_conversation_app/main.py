@@ -88,6 +88,7 @@ def run(
     from reachy_mini_conversation_app.moves import MovementManager
     from reachy_mini_conversation_app.config import (
         HF_LOCAL_CONNECTION_MODE,
+        config,
         set_instance_path,
         get_hf_connection_selection,
         resolve_app_timeout_minutes,
@@ -119,6 +120,17 @@ def run(
             startup_settings = load_startup_settings_into_runtime(instance_path)
         except Exception as e:
             logger.warning("Failed to load startup settings: %s", e)
+
+    # The CLI flag wins over (and outlives) any env value: set after the .env
+    # reload above so nothing later in startup can silently flip the condition.
+    if args.control:
+        config.CONTROL_MODE = True
+    if config.CONTROL_MODE:
+        logger.warning("=" * 72)
+        logger.warning("CONTROL MODE: sensing and recording run normally, but the robot will")
+        logger.warning("NOT interact — no greeting, no spoken replies, interventions are only")
+        logger.warning("logged as 'CONTROL: would have ...' counterfactuals.")
+        logger.warning("=" * 72)
 
     logger.info(
         "Configured Hugging Face realtime backend, connection mode: %s",

@@ -22,6 +22,16 @@ def parse_args() -> tuple[argparse.Namespace, list]:  # type: ignore
         help="Enable engagement monitoring (requires the camera and the local engagement service)",
     )
     parser.add_argument(
+        "--control",
+        default=False,
+        action="store_true",
+        help=(
+            "Study control condition: all sensing (camera, emotion, engagement, session recording) "
+            "runs normally, but the robot never interacts — no greeting, no spoken replies, and "
+            "interventions are logged counterfactually instead of sent"
+        ),
+    )
+    parser.add_argument(
         "--ui",
         default=False,
         action="store_true",

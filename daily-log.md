@@ -51,13 +51,13 @@ Participant window
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- SSH setup on Reachy, didn't finish
+- Merging latest changes fromn upstream
 
 #### What worked
 - 
 
 #### What didn't / open questions
-- 
+- Upstream changes to extensive and not relevant to study setup, disregard until post study and potentially even post presentation demo, not worth it
 
 #### Random thoughts / ideas
 - 

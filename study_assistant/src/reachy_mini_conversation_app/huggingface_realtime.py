@@ -519,6 +519,13 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         if self._startup_greeting_sent or not self.connection:
             return
 
+        if config.CONTROL_MODE:
+            # Control condition: the session connects (the monitors need it) but the
+            # robot must not open the conversation.
+            self._startup_greeting_sent = True
+            logger.info("CONTROL: startup greeting suppressed")
+            return
+
         greeting_prompt = get_session_greeting_prompt().strip()
         if not greeting_prompt:
             self._startup_greeting_sent = True
@@ -584,6 +591,11 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def send_user_text(self, text: str) -> None:
         """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
+        if config.CONTROL_MODE:
+            # Control condition: accept the submission (identical participant procedure)
+            # and keep the text in the log, but never wake the model with it.
+            logger.info("CONTROL: task context received but not forwarded: %s", text)
+            return
         framed = f"{TASK_CONTEXT_PROMPT}\n\n{text}"
         try:
             await self.say(framed)
@@ -738,7 +750,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.debug("Emotion poll: not connected, skipping intervention check")
             return
         if self._emotion_monitor.should_intervene(now, response_done, self.last_activity_time):
-            await self._send_emotion_intervention()
+            if config.CONTROL_MODE:
+                # Counterfactual: log what the treatment condition would have done, and
+                # still consume the cooldown so per-session counts stay comparable.
+                logger.info("CONTROL: would have sent emotion intervention (negative_share=%.2f)", negative_share)
+            else:
+                await self._send_emotion_intervention()
             self._emotion_monitor.mark_intervened(now)
 
     async def _engagement_poll_loop(self) -> None:
@@ -798,7 +815,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             logger.debug("Engagement poll: not connected, skipping intervention check")
             return
         if self._engagement_monitor.should_intervene(now, response_done, self.last_activity_time):
-            await self._send_engagement_intervention()
+            if config.CONTROL_MODE:
+                # Counterfactual: log what the treatment condition would have done, and
+                # still consume the cooldown so per-session counts stay comparable.
+                logger.info("CONTROL: would have sent engagement intervention (average=%.2f)", average)
+            else:
+                await self._send_engagement_intervention()
             self._engagement_monitor.mark_intervened(now)
 
     async def _handle_tool_result(self, completed_tool: ToolNotification) -> None:

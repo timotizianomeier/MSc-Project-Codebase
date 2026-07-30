@@ -171,6 +171,7 @@ The app runs in console mode by default. Add `--ui` to also serve a web UI at ht
 | `--no-camera` | `False` | Run without camera capture. |
 | `--emotion` | `False` | Enable facial emotion monitoring. Requires the camera and an emotion dependency extra: `uv sync --extra emotion-all` (both classifier backends), or `--extra emotion-deepface` / `--extra emotion-emotiefflib` for just one (the latter is the lightweight choice for constrained hosts like the robot's Pi). |
 | `--engagement` | `False` | Enable engagement monitoring. Requires the camera and the local engagement-scoring service (see `ENGAGEMENT_SERVICE_URL`). |
+| `--control` | `False` | Study control condition: sensing (camera, emotion, engagement, session recording) runs normally, but the robot never interacts — no greeting, no spoken replies, and interventions are logged as `CONTROL: would have ...` counterfactuals instead of sent. |
 | `--ui` | `False` | Serve the web UI at http://127.0.0.1:7860/, in addition to console mode. |
 | `--robot-name` | `None` | Optional. Connect to a specific robot by name when running multiple daemons on the same subnet. See [Multiple robots on the same subnet](#advanced-features). |
 | `--debug` | `False` | Enable verbose logging for troubleshooting. |
