@@ -2,6 +2,75 @@
 
 ---
 
+## 📅 [31.07.2026] — Entry #19
+
+### 🎯 Goals for Today
+X Continue testing e2e system with neetcode
+- Live testing (thresholds, LLM latency etc.)
+- Wireless / SSH trial
+- Hosted LLM refinement, A/B model testing, else hosted
+
+Later
+- Refine engagement detection, potentially add further modalities
+- Adjust thresholds
+- Do graph of current setup based on pollen graph
+
+### Status by module
+
+Emotion recognition
+- Calibrate threshold
+
+Engagement detecation
+- Calibrate threshold
+
+Context awareness
+- Refine rontend accessible from participant machine
+
+Local LLM
+- Test robustness
+
+Other
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+Participant window
+- Session timer
+- mute option
+- pause / end option
+
+---
+
+### 🔬 Findings & Notes
+- Could self-test with neetcode tasks as realistic use case
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [30.07.2026] — Entry #18
 
 ### 🎯 Goals for Today
