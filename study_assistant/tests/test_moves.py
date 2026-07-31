@@ -141,3 +141,89 @@ def test_pitch_trim_tilts_every_outgoing_pose(monkeypatch: pytest.MonkeyPatch) -
     expected = compose_world_offset(create_head_pose(0, 0, 0, 0, 8.0, 0, degrees=True), head)
     assert np.allclose(sent, expected)
     assert not np.allclose(sent, head)
+
+
+def _heartbeat_manager(
+    monkeypatch: pytest.MonkeyPatch, *, enabled: bool = True, control: bool = False
+) -> MovementManager:
+    from reachy_mini_conversation_app.config import config
+
+    monkeypatch.setattr(config, "ANTENNA_HEARTBEAT_ENABLED", enabled)
+    monkeypatch.setattr(config, "CONTROL_MODE", control)
+    return MovementManager(MagicMock())
+
+
+def test_heartbeat_move_starts_and_ends_at_held_antennas() -> None:
+    """The flutter must begin and end exactly at the held positions — no snap."""
+    from reachy_mini_conversation_app.moves import AntennaHeartbeatMove
+
+    hold = (create_head_pose(0, 0, 0, 0, 0, 0, degrees=True), (-0.1745, 0.1745), 0.0)
+    move = AntennaHeartbeatMove(hold)
+
+    _, start_antennas, _ = move.evaluate(0.0)
+    _, end_antennas, _ = move.evaluate(move.duration)
+    _, mid_antennas, _ = move.evaluate(move.duration * 0.15)
+
+    assert np.allclose(start_antennas, hold[1], atol=1e-9)
+    assert np.allclose(end_antennas, hold[1], atol=1e-9)
+    assert not np.allclose(mid_antennas, hold[1], atol=1e-3)
+
+
+def test_heartbeat_move_never_moves_head_or_body() -> None:
+    """Only antennas animate; head pose and body yaw are held for the whole move."""
+    from reachy_mini_conversation_app.moves import AntennaHeartbeatMove
+
+    hold_head = create_head_pose(0, 0, 0, 0, -8, 0, degrees=True)
+    move = AntennaHeartbeatMove((hold_head, (-0.1745, 0.1745), 0.3))
+
+    for t in (0.0, 0.3, 0.6, 0.9, 1.2):
+        head, _, body_yaw = move.evaluate(t)
+        assert np.allclose(head, hold_head)
+        assert body_yaw == 0.3
+
+
+def test_heartbeat_queues_when_due_and_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Enabled + due + fully idle -> exactly one flutter lands in the move queue."""
+    from reachy_mini_conversation_app.moves import AntennaHeartbeatMove
+
+    manager = _heartbeat_manager(monkeypatch)
+    manager._next_heartbeat_time = 0.0  # long overdue
+
+    manager._maybe_queue_antenna_heartbeat(now=100.0)
+
+    assert len(manager.move_queue) == 1
+    assert isinstance(manager.move_queue[0], AntennaHeartbeatMove)
+    assert manager._next_heartbeat_time > 100.0  # rescheduled
+
+
+def test_heartbeat_first_call_only_schedules(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first tick schedules a future flutter instead of firing immediately at startup."""
+    manager = _heartbeat_manager(monkeypatch)
+
+    manager._maybe_queue_antenna_heartbeat(now=100.0)
+
+    assert len(manager.move_queue) == 0
+    lo, hi = MovementManager.HEARTBEAT_INTERVAL_RANGE_S
+    assert 100.0 + lo <= manager._next_heartbeat_time <= 100.0 + hi
+
+
+def test_heartbeat_suppressed_in_control_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Control condition: no flutter, ever — not even scheduling."""
+    manager = _heartbeat_manager(monkeypatch, control=True)
+    manager._next_heartbeat_time = 0.0
+
+    manager._maybe_queue_antenna_heartbeat(now=100.0)
+
+    assert len(manager.move_queue) == 0
+
+
+def test_heartbeat_postponed_while_busy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A due flutter defers (short retry) while listening instead of interrupting."""
+    manager = _heartbeat_manager(monkeypatch)
+    manager._next_heartbeat_time = 0.0
+    manager._is_listening = True
+
+    manager._maybe_queue_antenna_heartbeat(now=100.0)
+
+    assert len(manager.move_queue) == 0
+    assert manager._next_heartbeat_time == 105.0  # 5s retry, slot not burned

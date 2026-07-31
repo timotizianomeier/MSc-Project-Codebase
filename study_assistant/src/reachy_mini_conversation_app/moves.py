@@ -25,6 +25,7 @@ Safety
 
 from __future__ import annotations
 import time
+import random
 import logging
 import threading
 from queue import Empty, Queue
@@ -50,6 +51,41 @@ CONTROL_LOOP_FREQUENCY_HZ = 60.0  # Hz - Target frequency for the movement contr
 
 # Type definitions
 FullBodyPose = Tuple[NDArray[np.float32], Tuple[float, float], float]  # (head_pose_4x4, antennas, body_yaw)
+
+
+class AntennaHeartbeatMove(Move):  # type: ignore
+    """Brief antenna flutter used as an idle 'alive' cue (study body-double signal).
+
+    Head and body hold their current pose for the whole move — only the antennas
+    animate, so the camera stays perfectly still. The flutter starts and ends
+    exactly at the held antenna positions (sine envelope), so there is no snap.
+    """
+
+    def __init__(
+        self,
+        hold_pose: FullBodyPose,
+        duration: float = 1.2,
+        amplitude_rad: float = 0.25,
+    ):
+        """Freeze the given pose and animate antennas around it for `duration` seconds."""
+        self._hold_head = hold_pose[0].astype(np.float64)
+        self._hold_antennas = np.array(hold_pose[1], dtype=np.float64)
+        self._hold_body_yaw = float(hold_pose[2])
+        self._duration = duration
+        self._amplitude = amplitude_rad
+
+    @property
+    def duration(self) -> float:
+        """Duration property required by official Move interface."""
+        return self._duration
+
+    def evaluate(self, t: float) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, float | None]:
+        """Evaluate the flutter at time t: two mirrored antenna bounces, zero at both ends."""
+        phase = min(max(t / self._duration, 0.0), 1.0)
+        # sin(pi*phase) envelope guarantees rest at start/end; sin(4*pi*phase) gives two bounces.
+        sway = self._amplitude * np.sin(np.pi * phase) * np.sin(4 * np.pi * phase)
+        antennas = self._hold_antennas + np.array([-sway, sway], dtype=np.float64)
+        return (self._hold_head.copy(), antennas, self._hold_body_yaw)
 
 
 class BreathingMove(Move):  # type: ignore
@@ -185,6 +221,9 @@ class MovementManager:
     - External threads communicate via `_command_queue` messages.
     """
 
+    # Idle antenna heartbeat cadence: randomized so the cue never feels metronomic.
+    HEARTBEAT_INTERVAL_RANGE_S = (60.0, 120.0)
+
     def __init__(
         self,
         current_robot: ReachyMini,
@@ -234,6 +273,8 @@ class MovementManager:
             if config.HEAD_PITCH_TRIM_DEG
             else None
         )
+        # Idle antenna heartbeat: next wall-clock firing time; None = not yet scheduled.
+        self._next_heartbeat_time: float | None = None
 
         # Cross-thread signalling
         self._command_queue: "Queue[Tuple[str, Any]]" = Queue()
@@ -557,6 +598,33 @@ class MovementManager:
 
         return antennas_cmd
 
+    def _maybe_queue_antenna_heartbeat(self, now: float) -> None:
+        """Queue the idle antenna flutter when due (study 'body double' cue).
+
+        Worker-thread only. Fires every HEARTBEAT_MIN..MAX seconds, but only while
+        the robot is otherwise fully idle: any active or queued move, listening
+        mode, or breathing postpones the pulse without burning the slot. Disabled
+        entirely in the control condition (no robot output there, not even this).
+        """
+        if not config.ANTENNA_HEARTBEAT_ENABLED or config.CONTROL_MODE:
+            return
+        if self._next_heartbeat_time is None:
+            self._next_heartbeat_time = now + random.uniform(*self.HEARTBEAT_INTERVAL_RANGE_S)
+            return
+        if now < self._next_heartbeat_time:
+            return
+        if self.state.current_move is not None or self.move_queue or self._is_listening or self._breathing_active:
+            self._next_heartbeat_time = now + 5.0  # busy: retry shortly
+            return
+        hold_pose = (
+            clone_full_body_pose(self.state.last_primary_pose)
+            if self.state.last_primary_pose is not None
+            else (create_head_pose(0, 0, 0, 0, 0, 0, degrees=True), (-0.1745, 0.1745), 0.0)
+        )
+        self.move_queue.append(AntennaHeartbeatMove(hold_pose))
+        self._next_heartbeat_time = now + random.uniform(*self.HEARTBEAT_INTERVAL_RANGE_S)
+        logger.debug("Antenna heartbeat queued")
+
     def _issue_control_command(
         self, head: NDArray[np.float32], antennas: Tuple[float, float], body_yaw: float
     ) -> None:
@@ -750,6 +818,9 @@ class MovementManager:
 
             # 1) Poll external commands
             self._poll_signals(loop_start)
+
+            # 1b) Idle antenna heartbeat (no-op unless enabled and due)
+            self._maybe_queue_antenna_heartbeat(loop_start)
 
             # 2) Manage the primary move queue (start new move, end finished move, breathing)
             self._update_primary_motion(loop_start)
