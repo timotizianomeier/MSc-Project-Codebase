@@ -307,7 +307,9 @@ class Config:
     HF_TOKEN = os.getenv("HF_TOKEN")  # Optional, falls back to hf auth login if not set
     ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
-    EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    # Default flipped deepface -> emotiefflib 31.07 (study standard on all platforms;
+    # deepface path retained for the documented detector A/B, opt-in via env).
+    EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "emotiefflib")
     # Unprompted-motion knobs, DEFAULT OFF (study-first: minimize distraction, stabilize
     # camera frames). Set to 1 to restore the stock idle behaviors.
     IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)

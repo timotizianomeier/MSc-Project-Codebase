@@ -14,7 +14,14 @@ def _install_fake_deepface(
     analyze_result: list[dict[str, Any]] | None = None,
     raise_not_detected: bool = False,
 ) -> None:
-    """Shadow the uninstalled deepface package with a stand-in for the two symbols we use."""
+    """Shadow the uninstalled deepface package with a stand-in for the two symbols we use.
+
+    Also pins the classifier backend to deepface: since the default flipped to
+    emotiefflib (31.07), these tests must select the path they are faking.
+    """
+    from reachy_mini_conversation_app.config import config
+
+    monkeypatch.setattr(config, "EMOTION_CLASSIFIER_BACKEND", "deepface")
 
     class FaceNotDetected(ValueError):
         pass
