@@ -39,6 +39,7 @@ from reachy_mini_conversation_app.config import (
     get_hf_connection_selection,
 )
 from reachy_mini_conversation_app.prompts import (
+    SESSION_OVER_PROMPT,
     TASK_CONTEXT_PROMPT,
     EMOTION_INTERVENTION_PROMPT,
     ENGAGEMENT_INTERVENTION_PROMPT,
@@ -191,6 +192,12 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         self._startup_greeting_sent = False
         self._in_flight_tool_calls: set[str] = set()
         self._tool_batch_needs_response = False
+
+        # Study-session gate (SESSION_GATE_ENABLED): armed-but-dormant until the
+        # participant presses Start session; a timer then closes the gate again.
+        self._study_session_started_at: float | None = None
+        self._study_session_ended = False
+        self._session_timer_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def _sanitize_tool_result_for_model(tool_name: str, tool_result: dict[str, Any]) -> dict[str, Any]:
@@ -514,9 +521,60 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         self._mark_activity("say")
         await self._safe_response_create()
 
+    def session_gate_open(self) -> bool:
+        """Return whether the study-session gate currently admits participant input."""
+        if not config.SESSION_GATE_ENABLED:
+            return True
+        return self._study_session_started_at is not None and not self._study_session_ended
+
+    async def start_study_session(self) -> bool:
+        """Open the session gate: log the START marker, greet, and start the end timer.
+
+        Idempotent — only the first call starts the session; later calls (double
+        clicks, page reloads) return False and change nothing.
+        """
+        if not config.SESSION_GATE_ENABLED:
+            logger.info("session.start called but SESSION_GATE_ENABLED is off — nothing to do")
+            return False
+        if self._study_session_started_at is not None:
+            logger.info("session.start ignored — session already started")
+            return False
+
+        self._study_session_started_at = time.monotonic()
+        logger.info("=" * 72)
+        logger.info(
+            "SESSION START — duration %.1f min%s",
+            config.SESSION_DURATION_MINUTES,
+            " (CONTROL condition)" if config.CONTROL_MODE else "",
+        )
+        logger.info("=" * 72)
+        self._session_timer_task = asyncio.create_task(self._session_timer(), name="session-timer")
+        await self._send_startup_greeting_prompt()
+        return True
+
+    async def _session_timer(self) -> None:
+        """Sleep out the session, then log the END marker and close the gate."""
+        await asyncio.sleep(config.SESSION_DURATION_MINUTES * 60.0)
+        self._study_session_ended = True
+        logger.info("=" * 72)
+        logger.info("SESSION END — %.1f min elapsed", config.SESSION_DURATION_MINUTES)
+        logger.info("=" * 72)
+        if config.CONTROL_MODE:
+            logger.info("CONTROL: session-over announcement suppressed")
+            return
+        try:
+            await self.say(SESSION_OVER_PROMPT)
+        except Exception as e:
+            logger.warning("Failed to queue session-over announcement: %s", e)
+
     async def _send_startup_greeting_prompt(self) -> None:
         """Prompt the model to open the conversation once the session is ready."""
         if self._startup_greeting_sent or not self.connection:
+            return
+
+        # Session gate: hold the greeting (without consuming it) until Start session.
+        if config.SESSION_GATE_ENABLED and self._study_session_started_at is None:
+            logger.info("Session gate: greeting deferred until session start")
             return
 
         if config.CONTROL_MODE:
@@ -591,6 +649,9 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def send_user_text(self, text: str) -> None:
         """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
+        if not self.session_gate_open():
+            logger.info("Session gate: task context rejected (session not active): %s", text)
+            return
         if config.CONTROL_MODE:
             # Control condition: accept the submission (identical participant procedure)
             # and keep the text in the log, but never wake the model with it.
@@ -711,6 +772,8 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def _poll_emotion_once(self) -> None:
         """Classify the current frame, record it, and send an intervention if warranted."""
+        if not self.session_gate_open():
+            return
         frame = self.deps.reachy_mini.media.get_frame()
         if frame is None:
             logger.debug("Emotion poll: no frame available")
@@ -771,6 +834,8 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def _poll_engagement_once(self, score_now: bool) -> None:
         """Buffer the current frame and, when due, score the window and gate an intervention."""
+        if not self.session_gate_open():
+            return
         frame = self.deps.reachy_mini.media.get_frame_jpeg()
         if frame is None:
             logger.debug("Engagement poll: no frame available")

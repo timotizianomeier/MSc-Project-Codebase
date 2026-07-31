@@ -35,6 +35,12 @@ TASK_CONTEXT_PROMPT = (
     "Briefly acknowledge that you've noted it, and don't solve, explain, or answer it unless they ask."
 )
 
+SESSION_OVER_PROMPT = (
+    "The study session time is now over. Warmly tell the student the session has ended, "
+    "thank them for their focused work, and say goodbye in one or two short sentences. "
+    "Do not ask any questions or start a new topic."
+)
+
 
 def _default_instructions_file() -> Path:
     return DEFAULT_PROFILES_DIRECTORY / DEFAULT_PROFILE_NAME / INSTRUCTIONS_FILENAME

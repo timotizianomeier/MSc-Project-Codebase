@@ -622,11 +622,33 @@ class LocalStream:
             text = str(params.get("text", "")).strip()
             if not text:
                 raise JsonRpcError("context requires 'text'", reason="invalid_params", code=-32602)
+            if not self.handler.session_gate_open():
+                raise JsonRpcError("session not started", reason="session_not_started")
             if not self.handler._is_connected():
                 raise JsonRpcError("no active session", reason="not_running")
             # Unlike conversation.say, a context drop must not barge in on live speech.
             await self.handler.send_user_text(text)
             return {"ok": True}
+
+        # Study-session gate (participant page Start button). start is idempotent
+        # server-side — the "only clickable once" guarantee lives here, not in JS.
+        @rpc.method("session.start")  # type: ignore[untyped-decorator]
+        async def _rpc_session_start(params: dict[str, object]) -> dict[str, object]:
+            started = await self.handler.start_study_session()
+            return {
+                "started": started,
+                "active": self.handler.session_gate_open(),
+                "duration_minutes": config.SESSION_DURATION_MINUTES,
+            }
+
+        @rpc.method("session.status")  # type: ignore[untyped-decorator]
+        def _rpc_session_status(params: dict[str, object]) -> dict[str, object]:
+            return {
+                "gate_enabled": config.SESSION_GATE_ENABLED,
+                "started": getattr(self.handler, "_study_session_started_at", None) is not None,
+                "active": self.handler.session_gate_open(),
+                "duration_minutes": config.SESSION_DURATION_MINUTES,
+            }
 
         @rpc.method("backend.config")  # type: ignore[untyped-decorator]
         def _rpc_backend_config(params: dict[str, object]) -> dict[str, object]:
@@ -891,11 +913,11 @@ class LocalStream:
         while not self._stop_event.is_set():
             audio_frame = self._robot.media.get_audio_sample()
             if audio_frame is not None and not self._mic_muted:
-                # Recorder tee BEFORE the control gate: control sessions still record
-                # the participant; the model just never hears them.
+                # Recorder tee BEFORE the gates: recording covers the whole run;
+                # the SESSION START/END log markers delimit the analysis window.
                 if session_recorder is not None:
                     session_recorder.write_user_audio(input_sample_rate, audio_frame)
-                if not config.CONTROL_MODE:
+                if not config.CONTROL_MODE and self.handler.session_gate_open():
                     await self.handler.receive((input_sample_rate, audio_frame))
                 self._emit_level("user", audio_frame)
             await asyncio.sleep(0)  # avoid busy loop

@@ -320,6 +320,12 @@ class Config:
     # 60-120s while otherwise fully idle. Head/camera never move. Default OFF;
     # suppressed in CONTROL_MODE regardless.
     ANTENNA_HEARTBEAT_ENABLED = _env_flag("ANTENNA_HEARTBEAT_ENABLED", default=False)
+    # Study session gate: when ON, the app starts "armed but dormant" — no greeting,
+    # no monitors, no mic/context input — until the participant presses Start session
+    # on the participant page; a timer then ends the session after
+    # SESSION_DURATION_MINUTES. Default OFF = stock behavior (dev runs unaffected).
+    SESSION_GATE_ENABLED = _env_flag("SESSION_GATE_ENABLED", default=False)
+    SESSION_DURATION_MINUTES = float(os.getenv("SESSION_DURATION_MINUTES", "25"))
     # Windowed negative-mass threshold for emotion interventions (gate simulation 24.07:
     # backend-dependent calibration; emotiefflib's soft distributions want ~0.55).
     EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
@@ -442,11 +448,13 @@ def refresh_runtime_config_from_env() -> None:
     config.HF_TOKEN = os.getenv("HF_TOKEN")
     config.ENGAGEMENT_SERVICE_URL = os.getenv("ENGAGEMENT_SERVICE_URL", "http://127.0.0.1:8100")
     config.EMOTION_DETECTOR_BACKEND = os.getenv("EMOTION_DETECTOR_BACKEND", "opencv")
-    config.EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
+    config.EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "emotiefflib")
     config.IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)
     config.BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
     config.HEAD_PITCH_TRIM_DEG = float(os.getenv("HEAD_PITCH_TRIM_DEG", "0.0"))
     config.ANTENNA_HEARTBEAT_ENABLED = _env_flag("ANTENNA_HEARTBEAT_ENABLED", default=False)
+    config.SESSION_GATE_ENABLED = _env_flag("SESSION_GATE_ENABLED", default=False)
+    config.SESSION_DURATION_MINUTES = float(os.getenv("SESSION_DURATION_MINUTES", "25"))
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
     config.SESSION_RECORDING_DIR = os.getenv("SESSION_RECORDING_DIR", "")

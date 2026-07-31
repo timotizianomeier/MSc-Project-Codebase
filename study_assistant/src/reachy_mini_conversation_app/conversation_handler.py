@@ -140,6 +140,21 @@ class ConversationHandler(AsyncStreamHandler, ABC):
         """Inject a typed user message into the conversation and prompt a response."""
         ...
 
+    def session_gate_open(self) -> bool:
+        """Return whether participant input should currently reach the model.
+
+        Backends without a study-session concept are always open; the realtime
+        handler overrides this when SESSION_GATE_ENABLED arms the start-button flow.
+        """
+        return True
+
+    async def start_study_session(self) -> bool:
+        """Open the study-session gate; returns True if this call started it.
+
+        Default: no session concept, nothing to start.
+        """
+        return False
+
     @abstractmethod
     async def get_available_voices(self) -> list[str]:
         """Return voices available for the active backend."""

@@ -64,6 +64,8 @@
         You can simply paste the task itself (e.g., exercise, problem sheet, reading etc.) or describe it in your own words.
         Reachy will keep it in mind. You can send updates any time.
       </p>
+      <button type="button" id="session-start" class="participant__send" hidden>Start session</button>
+      <p class="participant__status" id="session-status" role="status"></p>
       <form id="context-form" class="talk__chat">
         <textarea
           id="context-input"
@@ -76,13 +78,57 @@
       <p class="participant__status" id="context-status" role="status"></p>
     </main>
     <script type="module">
-      import { sendChat, describeError } from "/static/js/api.js";
+      import { sendChat, describeError, rpcCall } from "/static/js/api.js";
 
       const form = document.getElementById("context-form");
       const input = document.getElementById("context-input");
       const send = document.getElementById("context-send");
       const status = document.getElementById("context-status");
+      const startButton = document.getElementById("session-start");
+      const sessionStatus = document.getElementById("session-status");
       let pending = false;
+
+      // Session-gate states: gate off -> form usable immediately (dev runs);
+      // gate on -> Start button first, form only once the session is running.
+      function setFormEnabled(enabled) {
+        input.disabled = !enabled;
+        send.disabled = !enabled;
+      }
+
+      async function initSessionGate() {
+        try {
+          const s = await rpcCall("session.status");
+          if (!s.gate_enabled) return; // stock behavior, no button
+          if (s.started && s.active) {
+            sessionStatus.textContent = "Session running.";
+          } else if (s.started && !s.active) {
+            setFormEnabled(false);
+            sessionStatus.textContent = "Session complete — thank you!";
+          } else {
+            setFormEnabled(false);
+            startButton.hidden = false;
+            sessionStatus.textContent = "Press start when you are ready to begin.";
+          }
+        } catch (error) {
+          sessionStatus.textContent = `Could not reach Reachy. (${describeError(error)})`;
+        }
+      }
+
+      startButton.addEventListener("click", async () => {
+        startButton.disabled = true; // UX only; the server is idempotent regardless
+        sessionStatus.textContent = "Starting…";
+        try {
+          await rpcCall("session.start");
+          startButton.hidden = true;
+          setFormEnabled(true);
+          sessionStatus.textContent = "Session running — Reachy will greet you in a moment.";
+        } catch (error) {
+          startButton.disabled = false;
+          sessionStatus.textContent = `Could not start, please try again. (${describeError(error)})`;
+        }
+      });
+
+      initSessionGate();
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
