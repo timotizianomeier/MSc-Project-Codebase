@@ -227,6 +227,13 @@ class MovementManager:
         self._last_set_target_err = 0.0
         self._set_target_err_interval = 1.0  # seconds between error logs
         self._set_target_err_suppressed = 0
+        # Baseline pitch trim: composed under every outgoing pose so the whole
+        # motion repertoire rides on a tilted resting posture (camera aiming knob).
+        self._pitch_trim_pose: NDArray[np.float64] | None = (
+            create_head_pose(0, 0, 0, 0, config.HEAD_PITCH_TRIM_DEG, 0, degrees=True)
+            if config.HEAD_PITCH_TRIM_DEG
+            else None
+        )
 
         # Cross-thread signalling
         self._command_queue: "Queue[Tuple[str, Any]]" = Queue()
@@ -554,6 +561,8 @@ class MovementManager:
         self, head: NDArray[np.float32], antennas: Tuple[float, float], body_yaw: float
     ) -> None:
         """Send the pose to the robot with throttled error logging."""
+        if self._pitch_trim_pose is not None:
+            head = compose_world_offset(self._pitch_trim_pose, head)
         try:
             self.current_robot.set_target(head=head, antennas=antennas, body_yaw=body_yaw)
         except Exception as e:

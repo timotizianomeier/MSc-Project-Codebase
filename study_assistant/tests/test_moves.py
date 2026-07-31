@@ -109,3 +109,35 @@ def test_speaking_anchor_composes_emotions_and_holds_dances_from_neutral() -> No
     manager.state.move_start_time = manager._now()
     head, _, _ = manager._get_primary_pose(manager._now())
     assert np.allclose(head, dance_head)
+
+
+def test_pitch_trim_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With HEAD_PITCH_TRIM_DEG at 0, poses reach the robot untouched."""
+    from reachy_mini_conversation_app.config import config
+
+    monkeypatch.setattr(config, "HEAD_PITCH_TRIM_DEG", 0.0)
+    robot = MagicMock()
+    manager = MovementManager(robot)
+    head = create_head_pose(0, 0, 0, 0, 0, 0, degrees=True)
+
+    manager._issue_control_command(head, (0.0, 0.0), 0.0)
+
+    sent = robot.set_target.call_args.kwargs["head"]
+    assert np.allclose(sent, head)
+
+
+def test_pitch_trim_tilts_every_outgoing_pose(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A nonzero trim composes the pitch offset under whatever pose is being sent."""
+    from reachy_mini_conversation_app.config import config
+
+    monkeypatch.setattr(config, "HEAD_PITCH_TRIM_DEG", 8.0)
+    robot = MagicMock()
+    manager = MovementManager(robot)
+    head = create_head_pose(0, 0, 0, 0, 0, 0, degrees=True)
+
+    manager._issue_control_command(head, (0.0, 0.0), 0.0)
+
+    sent = robot.set_target.call_args.kwargs["head"]
+    expected = compose_world_offset(create_head_pose(0, 0, 0, 0, 8.0, 0, degrees=True), head)
+    assert np.allclose(sent, expected)
+    assert not np.allclose(sent, head)

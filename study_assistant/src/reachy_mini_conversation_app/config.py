@@ -312,6 +312,10 @@ class Config:
     # camera frames). Set to 1 to restore the stock idle behaviors.
     IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)
     BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
+    # Baseline head-pitch trim in degrees, applied to EVERY pose sent to the robot
+    # (neutral, emotes, wobble all ride on the tilted baseline). Use it to aim the
+    # resting head/camera at the participant's face. 0 = stock posture.
+    HEAD_PITCH_TRIM_DEG = float(os.getenv("HEAD_PITCH_TRIM_DEG", "0.0"))
     # Windowed negative-mass threshold for emotion interventions (gate simulation 24.07:
     # backend-dependent calibration; emotiefflib's soft distributions want ~0.55).
     EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
@@ -437,6 +441,7 @@ def refresh_runtime_config_from_env() -> None:
     config.EMOTION_CLASSIFIER_BACKEND = os.getenv("EMOTION_CLASSIFIER_BACKEND", "deepface")
     config.IDLE_MOTIONS_ENABLED = _env_flag("IDLE_MOTIONS_ENABLED", default=False)
     config.BREATHING_ENABLED = _env_flag("BREATHING_ENABLED", default=False)
+    config.HEAD_PITCH_TRIM_DEG = float(os.getenv("HEAD_PITCH_TRIM_DEG", "0.0"))
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))
     config.EMOTION_FRAME_DUMP_DIR = os.getenv("EMOTION_FRAME_DUMP_DIR", "")
     config.SESSION_RECORDING_DIR = os.getenv("SESSION_RECORDING_DIR", "")
