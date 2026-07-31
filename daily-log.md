@@ -6,8 +6,8 @@
 
 ### 🎯 Goals for Today
 X Continue testing e2e system with neetcode
-- Live testing (thresholds, LLM latency etc.)
-- Wireless / SSH trial
+X Live testing (thresholds, LLM latency etc.)
+X Wireless / SSH trial
 - Hosted LLM refinement, A/B model testing, else hosted
 
 Later
@@ -45,7 +45,8 @@ Participant window
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+X Live testing (thresholds, LLM latency etc.)
+X Wireless / SSH trial
 
 #### What worked
 - 
@@ -60,13 +61,19 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Idle motions revised
+- Gate for session start and duration
+- Head position degree tweaking
+- Switch to emotiefflib
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Hosted LLM refinement, A/B model testing, else hosted
+- Leftover to-do's
+- Further investigation of test run
+- Reduce head position tweak
 
 ---
 ---
