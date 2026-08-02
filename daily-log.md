@@ -48,13 +48,13 @@ Participant window
 - Could self-test with neetcode tasks as realistic use case
 
 #### What I tried
-- 
+- s2s on cluster
 
 #### What worked
-- 
+- s2s on cluster working very smoothely (as long as thinking effort is none)
 
 #### What didn't / open questions
-- 
+- Improve stutters and VAD while robot is speaking
 
 #### Random thoughts / ideas
 - 
@@ -63,7 +63,7 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- s2s on one node, E4B on other
 
 **Blockers:**
 - 
