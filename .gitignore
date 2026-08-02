@@ -12,3 +12,4 @@ logs/recordings/
 experiments/**/results_*
 imperial-gpu-cluster.md
 study_llm.sbatch
+sandbox_s2s.sbatch
