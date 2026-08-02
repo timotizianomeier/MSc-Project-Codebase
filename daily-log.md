@@ -8,7 +8,7 @@
 X Continue testing e2e system with neetcode
 X Live testing (thresholds, LLM latency etc.)
 X Wireless / SSH trial
-- Hosted LLM refinement, A/B model testing, else hosted
+X Hosted LLM refinement, A/B model testing, else hosted
 - Leftover to-do's
 - Further investigation of test run
 - Reduce head position tweak
@@ -50,6 +50,7 @@ Participant window
 #### What I tried
 - s2s on cluster
 - engagement detector service swapped to cluster
+- compared local (cluster) vs hosted model
 
 #### What worked
 - s2s on cluster working very smoothely (as long as thinking effort is none)
@@ -57,6 +58,7 @@ Participant window
 
 #### What didn't / open questions
 - Improve stutters and VAD while robot is speaking
+- Hosted model still more powerful, test tomorrow and take decision
 
 #### Random thoughts / ideas
 - 
@@ -66,14 +68,17 @@ Participant window
 ### 📦 End of Day Summary
 **Shipped:** 
 - s2s on one node, E4B on other
-- swap to gemma 4 12b¨
+- swap to gemma 4 12b
 - engagement detector hosted on cluster, no load for local machine
+- comparison cluster vs hf hosted model
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Final test with supervisor
+- Further inspect stutter
+- e2e testing for thresholds, then deploy
 
 ---
 ---
