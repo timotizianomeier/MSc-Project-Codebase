@@ -49,9 +49,11 @@ Participant window
 
 #### What I tried
 - s2s on cluster
+- engagement detector service swapped to cluster
 
 #### What worked
 - s2s on cluster working very smoothely (as long as thinking effort is none)
+- engagement detector now running on cluster, script in separate repo validated equivalent scores to locally hosted detector as expected
 
 #### What didn't / open questions
 - Improve stutters and VAD while robot is speaking
@@ -64,6 +66,8 @@ Participant window
 ### 📦 End of Day Summary
 **Shipped:** 
 - s2s on one node, E4B on other
+- swap to gemma 4 12b¨
+- engagement detector hosted on cluster, no load for local machine
 
 **Blockers:**
 - 
