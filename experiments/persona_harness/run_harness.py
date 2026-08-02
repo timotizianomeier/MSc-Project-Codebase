@@ -31,7 +31,7 @@ BASE_URL = "http://localhost:8080/v1/responses"
 MODELS = {
     "e4b": ("hf.co/ggml-org/gemma-4-E4B-it-GGUF:Q8_0", 25.4),
     "12b": ("hf.co/google/gemma-4-12b-it-qat-q4_0-gguf:Q4_0", 18.5),
-    "qwen14b": ("qwen3:14b", 9.9),
+    # qwen14b eliminated 27.07 (9.9 t/s, hands over solutions on ask #2); cached cells remain readable.
 }
 SPOKEN_WORDS_PER_SECOND = 2.5  # TTS pace proxy for "how long would this take to hear"
 
@@ -129,9 +129,25 @@ def build_report(cells: dict) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--report-only", action="store_true", help="rebuild report from cached cells only")
+    parser.add_argument("--models", help="comma-separated model aliases to run (default: all)")
+    parser.add_argument("--personas", help="comma-separated persona names to run (default: all)")
     args = parser.parse_args()
 
+    models = MODELS
+    if args.models:
+        wanted = args.models.split(",")
+        unknown = [alias for alias in wanted if alias not in MODELS]
+        if unknown:
+            sys.exit(f"unknown model alias(es): {', '.join(unknown)} (have: {', '.join(MODELS)})")
+        models = {alias: MODELS[alias] for alias in wanted}
+
     personas = {path.stem: path.read_text() for path in sorted((HERE / "personas").glob("*.txt"))}
+    if args.personas:
+        wanted = args.personas.split(",")
+        unknown = [name for name in wanted if name not in personas]
+        if unknown:
+            sys.exit(f"unknown persona(s): {', '.join(unknown)} (have: {', '.join(personas)})")
+        personas = {name: personas[name] for name in wanted}
     scenarios = {
         name: turns
         for name, turns in json.loads((HERE / "scenarios" / "scenarios.json").read_text()).items()
@@ -141,7 +157,7 @@ def main() -> None:
     cache_dir.mkdir(exist_ok=True)
 
     cells = {}
-    for model_alias, (model, _tps) in MODELS.items():
+    for model_alias, (model, _tps) in models.items():
         for persona, instructions in personas.items():
             for scenario, turns in scenarios.items():
                 cell_path = cache_dir / f"{model_alias}__{persona}__{scenario}.json"

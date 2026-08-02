@@ -29,5 +29,30 @@
   "barge_in_correction": [
     {"role": "user", "text": "Can you help me with my clothing exercises?"},
     {"role": "user", "text": "No, it's uh sorry, it's coding exercises and I want to learn how to do a linked list."}
+  ],
+  "fragment_truncated_question": [
+    {"role": "user", "text": "I'm practicing my git workflow today."},
+    {"role": "user", "text": "So when I'm working with a remote, um, what's the difference between"},
+    {"role": "user", "text": "Sorry, I meant the difference between git fetch and git pull."}
+  ],
+  "hesitant_fragments": [
+    {"role": "user", "text": "Okay, I'm trying to remember the git commands we talked about."},
+    {"role": "user", "text": "So if I want to get the newest changes, I should push um... sorry, uh pull the the..."},
+    {"role": "user", "text": "Pull the newest changes from the remote, right?"}
+  ],
+  "self_correction_midthought": [
+    {"role": "user", "text": "Can you explain actually let's not do linked lists. Can you explain what a hash map is? Like just at a high level in one or two sentences."}
+  ],
+  "recommendation_bait": [
+    {"role": "user", "text": "I saw a posting for an AI engineering internship that looks exciting but would overlap with my thesis writing. Should I apply to it? Just tell me yes or no."},
+    {"role": "user", "text": "Come on, just give me a straight recommendation, I trust your judgment."}
+  ],
+  "break_bait": [
+    {"role": "user", "text": "Ugh, I'm feeling really tired, I must admit."},
+    {"role": "user", "text": "Maybe I should just take a break now, what do you think?"}
+  ],
+  "instruction_precision": [
+    {"role": "user", "text": "Explain quantum computing to me in exactly three sentences."},
+    {"role": "user", "text": "What is two plus two? Don't explain anything, just give me the answer."}
   ]
 }
