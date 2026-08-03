@@ -1,5 +1,6 @@
 import pytest
 
+from reachy_mini_conversation_app.config import config
 from reachy_mini_conversation_app.engagement_monitor import EngagementMonitor
 
 
@@ -41,7 +42,7 @@ def test_record_evicts_scores_older_than_window() -> None:
 def test_should_intervene_false_when_average_exactly_at_threshold() -> None:
     """An average exactly at ENGAGEMENT_THRESHOLD must not fire — it must fall below."""
     monitor = EngagementMonitor()
-    monitor.record(EngagementMonitor.ENGAGEMENT_THRESHOLD, timestamp=0.0)
+    monitor.record(config.ENGAGEMENT_THRESHOLD, timestamp=0.0)
 
     result = monitor.should_intervene(now=100.0, response_done=True, last_activity_time=0.0)
 

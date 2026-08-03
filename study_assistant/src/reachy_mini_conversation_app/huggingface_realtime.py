@@ -869,7 +869,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             "interaction_gap=%.1fs (need>%.0fs) intervention_gap=%s (need>%.0fs)",
             score,
             f"{average:.2f}" if average is not None else "n/a",
-            self._engagement_monitor.ENGAGEMENT_THRESHOLD,
+            config.ENGAGEMENT_THRESHOLD,
             response_done,
             interaction_gap,
             self._engagement_monitor.INTERACTION_COOLDOWN_SECONDS,

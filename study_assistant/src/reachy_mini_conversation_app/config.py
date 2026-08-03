@@ -332,6 +332,12 @@ class Config:
     # subtle below ~5%). Qwen3-TTS has no native speed control, so pace is adjusted at
     # playback. 1.0 = stock pace.
     SPEECH_RATE = float(os.getenv("SPEECH_RATE", "1.0"))
+    # Windowed-average engagement threshold: intervention when the 30s average falls
+    # BELOW this. 0.93 = Lalwani et al. legacy default; calibration bands from live
+    # sessions (07/2026): real participant at robot camera 0.85-0.94, straight-head
+    # robot camera 0.73-0.84, head-down-at-laptop webcam 0.65-0.73 → ~0.80 principled
+    # for the study setup.
+    ENGAGEMENT_THRESHOLD = float(os.getenv("ENGAGEMENT_THRESHOLD", "0.93"))
     # Study session gate: when ON, the app starts "armed but dormant" — no greeting,
     # no monitors, no mic/context input — until the participant presses Start session
     # on the participant page; a timer then ends the session after
@@ -467,6 +473,7 @@ def refresh_runtime_config_from_env() -> None:
     config.ANTENNA_HEARTBEAT_ENABLED = _env_flag("ANTENNA_HEARTBEAT_ENABLED", default=False)
     config.SPEECH_PREROLL_MS = float(os.getenv("SPEECH_PREROLL_MS", "200"))
     config.SPEECH_RATE = float(os.getenv("SPEECH_RATE", "1.0"))
+    config.ENGAGEMENT_THRESHOLD = float(os.getenv("ENGAGEMENT_THRESHOLD", "0.93"))
     config.SESSION_GATE_ENABLED = _env_flag("SESSION_GATE_ENABLED", default=False)
     config.SESSION_DURATION_MINUTES = float(os.getenv("SESSION_DURATION_MINUTES", "25"))
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))

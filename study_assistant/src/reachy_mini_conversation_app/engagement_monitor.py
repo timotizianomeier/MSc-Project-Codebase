@@ -1,14 +1,11 @@
 """Rolling engagement-score tracking and re-engagement decision, following Lalwani et al."""
 
-from typing import ClassVar
-
+from reachy_mini_conversation_app.config import config
 from reachy_mini_conversation_app.intervention_monitor import InterventionMonitor
 
 
 class EngagementMonitor(InterventionMonitor[float]):
     """Tracks recent engagement scores and decides when sustained disengagement warrants intervention."""
-
-    ENGAGEMENT_THRESHOLD: ClassVar[float] = 0.93
 
     def average_score(self) -> float | None:
         """Return the mean engagement score over the current window, or None when empty."""
@@ -17,6 +14,6 @@ class EngagementMonitor(InterventionMonitor[float]):
         return sum(sample.value for sample in self._samples) / len(self._samples)
 
     def _signal_active(self) -> bool:
-        """Return whether the windowed average has fallen below the engagement threshold."""
+        """Return whether the windowed average has fallen below ENGAGEMENT_THRESHOLD."""
         average = self.average_score()
-        return average is not None and average < self.ENGAGEMENT_THRESHOLD
+        return average is not None and average < config.ENGAGEMENT_THRESHOLD
