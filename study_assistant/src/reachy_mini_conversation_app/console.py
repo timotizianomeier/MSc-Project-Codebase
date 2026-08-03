@@ -8,9 +8,9 @@ import os
 import time
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Optional, TypeVar
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 
 import numpy as np
 
@@ -61,6 +61,8 @@ except Exception:  # pragma: no cover - only loaded when settings_app is used
     BaseModel = object  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def _detach_framework_root_routes(app: "FastAPI") -> None:
@@ -280,6 +282,19 @@ class LocalStream:
         except Exception as e:
             logger.debug("Active handler shutdown ignored during restart: %s", e)
 
+    async def _on_app_loop(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Await a handler coroutine on the app's main event loop.
+
+        RPC methods run on the web server's loop while the realtime websocket
+        lives on the app loop; concurrent sends from two loops interleave frames
+        on the wire and kill the session server-side. Every RPC call that reaches
+        the connection must be marshalled through here.
+        """
+        loop = self._asyncio_loop
+        if loop is None or not loop.is_running() or loop is asyncio.get_running_loop():
+            return await coro
+        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(coro, loop))
+
     def _mark_restart_requested(self, reason: str) -> None:
         """Request a backend restart from a synchronous route handler."""
         logger.info("Backend restart requested: %s", reason)
@@ -489,7 +504,7 @@ class LocalStream:
     async def change_voice(self, voice: str) -> str:
         """Change the voice through the active handler without rebuilding the backend."""
         try:
-            status = await self.handler.change_voice(voice)
+            status = await self._on_app_loop(self.handler.change_voice(voice))
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -598,7 +613,7 @@ class LocalStream:
             if not self.handler._is_connected():
                 raise JsonRpcError("no active session", reason="not_running")
             self.clear_audio_queue()  # barge in if mid-utterance
-            await self.handler.say(text)
+            await self._on_app_loop(self.handler.say(text))
             return {"ok": True}
 
         @rpc.method("conversation.interrupt")  # type: ignore[untyped-decorator]
@@ -627,14 +642,14 @@ class LocalStream:
             if not self.handler._is_connected():
                 raise JsonRpcError("no active session", reason="not_running")
             # Unlike conversation.say, a context drop must not barge in on live speech.
-            await self.handler.send_user_text(text)
+            await self._on_app_loop(self.handler.send_user_text(text))
             return {"ok": True}
 
         # Study-session gate (participant page Start button). start is idempotent
         # server-side — the "only clickable once" guarantee lives here, not in JS.
         @rpc.method("session.start")  # type: ignore[untyped-decorator]
         async def _rpc_session_start(params: dict[str, object]) -> dict[str, object]:
-            started = await self.handler.start_study_session()
+            started = await self._on_app_loop(self.handler.start_study_session())
             return {
                 "started": started,
                 "active": self.handler.session_gate_open(),

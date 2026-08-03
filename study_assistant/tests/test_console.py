@@ -829,3 +829,42 @@ def test_rpc_personalities_and_voices_methods() -> None:
         r2 = ws.receive_json()
     assert "choices" in r1["result"] and "current" in r1["result"]
     assert isinstance(r2["result"], list)
+
+
+def test_on_app_loop_marshals_cross_loop_calls() -> None:
+    """Handler coroutines invoked from another loop run on the app loop.
+
+    RPC methods run on the web server's event loop while the realtime websocket
+    lives on the app loop; unmarshalled concurrent sends interleave frames on the
+    wire and kill the session server-side (03.08 field failure: JSONDecodeError
+    on the s2s server the instant a large context paste was submitted).
+    """
+    stream = LocalStream(MagicMock(), SimpleNamespace(media=SimpleNamespace(audio=SimpleNamespace())))
+
+    executed_on: list[Any] = []
+
+    async def probe() -> str:
+        executed_on.append(asyncio.get_running_loop())
+        return "ok"
+
+    app_loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=app_loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        # Cross-loop call (the RPC topology): must execute on the app loop.
+        stream._asyncio_loop = app_loop
+        assert asyncio.run(stream._on_app_loop(probe())) == "ok"
+        assert executed_on == [app_loop]
+
+        # Same-loop call: runs inline without deadlocking on itself.
+        async def same_loop_call() -> str:
+            stream._asyncio_loop = asyncio.get_running_loop()
+            result: str = await stream._on_app_loop(probe())
+            return result
+
+        assert asyncio.run(same_loop_call()) == "ok"
+        assert len(executed_on) == 2 and executed_on[1] is not app_loop
+    finally:
+        app_loop.call_soon_threadsafe(app_loop.stop)
+        thread.join(timeout=2)
+        app_loop.close()
