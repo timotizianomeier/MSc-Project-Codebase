@@ -2,6 +2,80 @@
 
 ---
 
+## 📅 [03.08.2026] — Entry #22
+
+### 🎯 Goals for Today
+- Thresholds
+- Decision Lite vs wireless
+- Leftover to-do's
+- Further investigation of test run
+- Reduce head position tweak
+X Final test with supervisor
+- Further inspect stutter
+- Improve stutters and VAD while robot is speaking
+X Hosted model still more powerful, test tomorrow and take decision
+
+Later
+- Refine engagement detection, potentially add further modalities
+- Adjust thresholds
+- Do graph of current setup based on pollen graph
+
+### Status by module
+
+Emotion recognition
+- Calibrate threshold
+
+Engagement detecation
+- Calibrate threshold
+
+Context awareness
+- Refine rontend accessible from participant machine
+
+Local LLM
+- Test robustness
+
+Other
+- Try with Reachy cam
+- Try with external cam, reroute inattention detection modules with these images
+- Maybe add other bits, eg phone detection
+
+Participant window
+- Session timer
+- mute option
+- pause / end option
+
+---
+
+### 🔬 Findings & Notes
+- 
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [02.08.2026] — Entry #21
 
 ### 🎯 Goals for Today
