@@ -5,15 +5,12 @@
 ## 📅 [03.08.2026] — Entry #22
 
 ### 🎯 Goals for Today
-- Thresholds
-- Decision Lite vs wireless
+- Finalize thresholds under campus conditions
+- Decision Lite vs wireless on campus
 - Leftover to-do's
 - Further investigation of test run
 - Reduce head position tweak
-X Final test with supervisor
 - Further inspect stutter
-- Improve stutters and VAD while robot is speaking
-X Hosted model still more powerful, test tomorrow and take decision
 
 Later
 - Refine engagement detection, potentially add further modalities
@@ -65,13 +62,17 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Adjusted thresholds
+- Improved stutters by introducing 200ms delay
+- Final test run
+- Decided on model
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Idle motions
+- Leftover todos
 
 ---
 ---
