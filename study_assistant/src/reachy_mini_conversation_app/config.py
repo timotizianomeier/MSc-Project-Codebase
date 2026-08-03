@@ -327,6 +327,11 @@ class Config:
     # clipped, Pi audio pipeline reports ~290ms min latency; supervisor-suggested fix).
     # 0 disables.
     SPEECH_PREROLL_MS = float(os.getenv("SPEECH_PREROLL_MS", "200"))
+    # Playback-rate factor for robot speech: audio is enqueued with a proportionally
+    # scaled claimed sample rate, so 0.95 plays 5% slower (pitch drops ~0.9 semitones,
+    # subtle below ~5%). Qwen3-TTS has no native speed control, so pace is adjusted at
+    # playback. 1.0 = stock pace.
+    SPEECH_RATE = float(os.getenv("SPEECH_RATE", "1.0"))
     # Study session gate: when ON, the app starts "armed but dormant" — no greeting,
     # no monitors, no mic/context input — until the participant presses Start session
     # on the participant page; a timer then ends the session after
@@ -461,6 +466,7 @@ def refresh_runtime_config_from_env() -> None:
     config.HEAD_PITCH_TRIM_DEG = float(os.getenv("HEAD_PITCH_TRIM_DEG", "0.0"))
     config.ANTENNA_HEARTBEAT_ENABLED = _env_flag("ANTENNA_HEARTBEAT_ENABLED", default=False)
     config.SPEECH_PREROLL_MS = float(os.getenv("SPEECH_PREROLL_MS", "200"))
+    config.SPEECH_RATE = float(os.getenv("SPEECH_RATE", "1.0"))
     config.SESSION_GATE_ENABLED = _env_flag("SESSION_GATE_ENABLED", default=False)
     config.SESSION_DURATION_MINUTES = float(os.getenv("SESSION_DURATION_MINUTES", "25"))
     config.EMOTION_NEGATIVE_THRESHOLD = float(os.getenv("EMOTION_NEGATIVE_THRESHOLD", "0.40"))

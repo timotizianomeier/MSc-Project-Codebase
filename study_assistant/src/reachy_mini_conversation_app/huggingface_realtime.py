@@ -1170,6 +1170,11 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                         decoded_pcm_bytes = base64.b64decode(event.delta)
                         decoded_pcm = np.frombuffer(decoded_pcm_bytes, dtype=np.int16).reshape(1, -1)
                         self._mark_activity("assistant_audio_delta")
+                        # SPEECH_RATE < 1.0 slows playback by claiming a proportionally
+                        # lower sample rate (Qwen3-TTS has no native speed control).
+                        playback_rate = (
+                            int(self.SAMPLE_RATE * config.SPEECH_RATE) if config.SPEECH_RATE > 0 else self.SAMPLE_RATE
+                        )
                         if self._speech_preroll_pending:
                             # Open the audio channel with silence so the first word
                             # isn't clipped by output-pipeline spin-up (SPEECH_PREROLL_MS).
@@ -1178,7 +1183,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                             if preroll_samples > 0:
                                 await self.output_queue.put(
                                     (
-                                        self.SAMPLE_RATE,
+                                        playback_rate,
                                         np.zeros((1, preroll_samples), dtype=np.int16),
                                     )
                                 )
@@ -1188,7 +1193,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                             logger.info("Turn latency: first audio delta %.0f ms after user transcript", delta_ms)
                         await self.output_queue.put(
                             (
-                                self.SAMPLE_RATE,
+                                playback_rate,
                                 decoded_pcm,
                             ),
                         )
