@@ -189,6 +189,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         self._turn_user_done_at: float | None = None
         self._turn_response_created_at: float | None = None
         self._turn_first_audio_at: float | None = None
+        self._speech_preroll_pending = False
         self._startup_greeting_sent = False
         self._in_flight_tool_calls: set[str] = set()
         self._tool_batch_needs_response = False
@@ -1095,6 +1096,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     if event.type == "response.created":
                         self._mark_activity("response_created")
                         self.deps.movement_manager.set_speaking(True)
+                        self._speech_preroll_pending = True
                         self._response_done_event.clear()
                         self._response_started_or_rejected_event.set()
                         if self._turn_user_done_at is not None and self._turn_response_created_at is None:
@@ -1168,6 +1170,18 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                         decoded_pcm_bytes = base64.b64decode(event.delta)
                         decoded_pcm = np.frombuffer(decoded_pcm_bytes, dtype=np.int16).reshape(1, -1)
                         self._mark_activity("assistant_audio_delta")
+                        if self._speech_preroll_pending:
+                            # Open the audio channel with silence so the first word
+                            # isn't clipped by output-pipeline spin-up (SPEECH_PREROLL_MS).
+                            self._speech_preroll_pending = False
+                            preroll_samples = int(self.SAMPLE_RATE * config.SPEECH_PREROLL_MS / 1000)
+                            if preroll_samples > 0:
+                                await self.output_queue.put(
+                                    (
+                                        self.SAMPLE_RATE,
+                                        np.zeros((1, preroll_samples), dtype=np.int16),
+                                    )
+                                )
                         if self._turn_user_done_at is not None and self._turn_first_audio_at is None:
                             self._turn_first_audio_at = time.perf_counter()
                             delta_ms = (self._turn_first_audio_at - self._turn_user_done_at) * 1000
