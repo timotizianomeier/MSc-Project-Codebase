@@ -3,6 +3,7 @@
 from __future__ import annotations
 import sys
 import time
+import signal
 import asyncio
 import logging
 import argparse
@@ -329,6 +330,21 @@ def run(
 
     if app_stop_event:
         threading.Thread(target=poll_stop_event, daemon=True).start()
+
+    # Ctrl-C = graceful end-of-session: put Reachy in the sleep pose, then run the
+    # normal shutdown (which finalizes the session recording). Reuses the proven
+    # voice-tool/inactivity-timeout path instead of relying on KeyboardInterrupt
+    # propagation through asyncio.run, which skipped these steps entirely (29.07).
+    # Only from the main thread (the console entrypoint); under the daemon-managed
+    # apps framework run() executes off-main and the stop_event flow applies instead.
+    if threading.current_thread() is threading.main_thread():
+
+        def _sleep_on_sigint(_signum: int, _frame: Any) -> None:
+            signal.signal(signal.SIGINT, signal.default_int_handler)  # 2nd Ctrl-C force-quits
+            logger.info("Interrupt received — putting Reachy to sleep and shutting down (Ctrl-C again to force quit).")
+            threading.Thread(target=run_go_to_sleep_tool, name="sigint-sleep", daemon=True).start()
+
+        signal.signal(signal.SIGINT, _sleep_on_sigint)
 
     try:
         stream_manager.launch()
