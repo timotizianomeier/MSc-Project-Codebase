@@ -816,8 +816,14 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         if self._emotion_monitor.should_intervene(now, response_done, self.last_activity_time):
             if config.CONTROL_MODE:
                 # Counterfactual: log what the treatment condition would have done, and
-                # still consume the cooldown so per-session counts stay comparable.
-                logger.info("CONTROL: would have sent emotion intervention (negative_share=%.2f)", negative_share)
+                # consume the same cooldowns as a sent intervention (intervention cooldown
+                # below, interaction cooldown via _mark_activity) so the gate arithmetic
+                # stays identical between conditions.
+                logger.info(
+                    "CONTROL: would have sent emotion intervention (negative_share=%.2f); cooldowns reset as if sent",
+                    negative_share,
+                )
+                self._mark_activity("emotion_intervention_counterfactual")
             else:
                 await self._send_emotion_intervention()
             self._emotion_monitor.mark_intervened(now)
@@ -883,8 +889,14 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         if self._engagement_monitor.should_intervene(now, response_done, self.last_activity_time):
             if config.CONTROL_MODE:
                 # Counterfactual: log what the treatment condition would have done, and
-                # still consume the cooldown so per-session counts stay comparable.
-                logger.info("CONTROL: would have sent engagement intervention (average=%.2f)", average)
+                # consume the same cooldowns as a sent intervention (intervention cooldown
+                # below, interaction cooldown via _mark_activity) so the gate arithmetic
+                # stays identical between conditions.
+                logger.info(
+                    "CONTROL: would have sent engagement intervention (average=%.2f); cooldowns reset as if sent",
+                    average,
+                )
+                self._mark_activity("engagement_intervention_counterfactual")
             else:
                 await self._send_engagement_intervention()
             self._engagement_monitor.mark_intervened(now)
