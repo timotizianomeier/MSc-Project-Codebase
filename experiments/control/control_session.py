@@ -303,8 +303,13 @@ class ControlSession:
 
 
 def build_web_app(session: ControlSession) -> FastAPI:
-    """Serve the app's own participant page plus the three RPC methods it calls."""
+    """Serve the control participant page (Start button only) plus the RPC methods it calls.
+
+    The page lives next to this script; it borrows the app's /static assets
+    (style.css, js/api.js) so styling and RPC behavior stay identical.
+    """
     static_dir = Path(reachy_mini_conversation_app.__file__).parent / "static"
+    control_page = Path(__file__).parent / "participant.html"
     app = FastAPI()
 
     @app.middleware("http")
@@ -318,7 +323,7 @@ def build_web_app(session: ControlSession) -> FastAPI:
 
     @app.get("/participant")
     def _participant() -> FileResponse:
-        return FileResponse(str(static_dir / "participant.html"))
+        return FileResponse(str(control_page))
 
     @app.get("/favicon.ico")
     def _favicon() -> Response:
