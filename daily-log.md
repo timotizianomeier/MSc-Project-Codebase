@@ -6,41 +6,12 @@
 
 ### 🎯 Goals for Today
 - Finalize thresholds under campus conditions
-- Decision Lite vs wireless on campus
+X Decision Lite vs wireless on campus
 - Leftover to-do's
 - Further investigation of test run
-- Reduce head position tweak
-- Further inspect stutter if they reoccur
+X Reduce head position tweak
+X Further inspect stutter if they reoccur
 - Idle motions
-
-Later
-- Refine engagement detection, potentially add further modalities
-- Adjust thresholds
-- Do graph of current setup based on pollen graph
-
-### Status by module
-
-Emotion recognition
-- Calibrate threshold
-
-Engagement detecation
-- Calibrate threshold
-
-Context awareness
-- Refine rontend accessible from participant machine
-
-Local LLM
-- Test robustness
-
-Other
-- Try with Reachy cam
-- Try with external cam, reroute inattention detection modules with these images
-- Maybe add other bits, eg phone detection
-
-Participant window
-- Session timer
-- mute option
-- pause / end option
 
 ---
 
@@ -63,13 +34,16 @@ Participant window
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Control condition with external camera
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- Finalize thresholds under campus conditions
+- Leftover to-do's
+- Further investigation of test run
+- Idle motions
 
 ---
 ---
