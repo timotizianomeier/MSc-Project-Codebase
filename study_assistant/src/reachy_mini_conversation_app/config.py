@@ -318,8 +318,9 @@ class Config:
     # (neutral, emotes, wobble all ride on the tilted baseline). Use it to aim the
     # resting head/camera at the participant's face. 0 = stock posture.
     HEAD_PITCH_TRIM_DEG = float(os.getenv("HEAD_PITCH_TRIM_DEG", "0.0"))
-    # Idle antenna heartbeat ("body double" cue): a brief antenna flutter every
-    # 60-120s while otherwise fully idle. Head/camera never move. Default OFF;
+    # Idle antenna heartbeat ("body double" cue): a subtle antenna variation
+    # (5 kinds, random) every 10-30s while otherwise fully idle. Head/camera
+    # never move. Default OFF;
     # suppressed in CONTROL_MODE regardless.
     ANTENNA_HEARTBEAT_ENABLED = _env_flag("ANTENNA_HEARTBEAT_ENABLED", default=False)
     # Silence prepended before each robot utterance so the audio channel is "open"

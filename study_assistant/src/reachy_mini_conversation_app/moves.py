@@ -133,10 +133,10 @@ def make_idle_antenna_move(hold_pose: FullBodyPose, rng: random.Random | None = 
         gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
         return AntennaHeartbeatMove(hold_pose, duration=1.6, amplitude_rad=0.17, gains=gains, bounces=0.5, name=kind)
     if kind == "single_twitch":
-        # One antenna, two quick mini-bounces — smaller and busier than the flick.
+        # One antenna, two slow mini-bounces — smaller and busier than the flick.
         side = int(pick((0, 1)))
         gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
-        return AntennaHeartbeatMove(hold_pose, duration=1.8, amplitude_rad=0.14, gains=gains, bounces=2.0, name=kind)
+        return AntennaHeartbeatMove(hold_pose, duration=2.4, amplitude_rad=0.14, gains=gains, bounces=2.0, name=kind)
     if kind == "perk":
         # Both antennas rise once and settle — a slow attentive arc.
         return AntennaHeartbeatMove(hold_pose, duration=3.2, amplitude_rad=0.17, bounces=0.5, name=kind)
@@ -145,8 +145,9 @@ def make_idle_antenna_move(hold_pose: FullBodyPose, rng: random.Random | None = 
         return AntennaHeartbeatMove(
             hold_pose, duration=2.0, amplitude_rad=0.17, bounces=0.5, stagger_s=0.7, name=kind
         )
-    # double_flutter: the original mirrored two-bounce flutter, unchanged.
-    return AntennaHeartbeatMove(hold_pose)
+    # double_flutter: the mirrored two-bounce flutter — slowed and shrunk from the
+    # original 1.2s/0.25rad for the study's calmer presence cue (05.08 user test).
+    return AntennaHeartbeatMove(hold_pose, duration=2.4, amplitude_rad=0.18, name=kind)
 
 
 class BreathingMove(Move):  # type: ignore
