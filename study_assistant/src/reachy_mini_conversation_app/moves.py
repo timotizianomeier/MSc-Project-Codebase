@@ -138,12 +138,13 @@ def make_idle_antenna_move(hold_pose: FullBodyPose, rng: random.Random | None = 
         gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
         return AntennaHeartbeatMove(hold_pose, duration=2.4, amplitude_rad=0.14, gains=gains, bounces=2.0, name=kind)
     if kind == "perk":
-        # Both antennas rise once and settle — a slow attentive arc.
-        return AntennaHeartbeatMove(hold_pose, duration=3.2, amplitude_rad=0.17, bounces=0.5, name=kind)
+        # Both antennas rise once and settle — a slow attentive arc. 2.0s, not
+        # slower: below ~0.27 rad/s peak the servos visibly step (05.08 hardware test).
+        return AntennaHeartbeatMove(hold_pose, duration=2.0, amplitude_rad=0.17, bounces=0.5, name=kind)
     if kind == "ripple":
         # Left bump, then right bump slightly delayed — a soft wave across the head.
         return AntennaHeartbeatMove(
-            hold_pose, duration=2.0, amplitude_rad=0.17, bounces=0.5, stagger_s=0.7, name=kind
+            hold_pose, duration=1.4, amplitude_rad=0.17, bounces=0.5, stagger_s=0.5, name=kind
         )
     # double_flutter: the mirrored two-bounce flutter — slowed and shrunk from the
     # original 1.2s/0.25rad for the study's calmer presence cue (05.08 user test).
