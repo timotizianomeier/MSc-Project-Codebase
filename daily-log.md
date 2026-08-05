@@ -8,8 +8,6 @@
 - Finalize thresholds under campus conditions
 - Leftover to-do's
 - Further investigation of test run
-x Idle motions
-x Need to add anything to debug log?
 
 ---
 
@@ -39,7 +37,7 @@ x Need to add anything to debug log?
 - 
 
 **Tomorrow:** 
-- 
+- Analyse sessions under different lighting
 
 ---
 ---
