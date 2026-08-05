@@ -8,8 +8,8 @@
 - Finalize thresholds under campus conditions
 - Leftover to-do's
 - Further investigation of test run
-- Idle motions
-- Need to add anything to debug log?
+x Idle motions
+x Need to add anything to debug log?
 
 ---
 
@@ -32,7 +32,8 @@
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Idle motions adjusted
+- Debug log parser for post-study analysis
 
 **Blockers:**
 - 

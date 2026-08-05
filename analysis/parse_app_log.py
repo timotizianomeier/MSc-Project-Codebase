@@ -8,7 +8,7 @@ poll lines and speech-activity lines are DEBUG level.
 Usage:
     python parse_app_log.py path/to/app.log [-o OUTDIR]
 
-Writes into OUTDIR (default: <log_dir>/<log_stem>_csv/):
+Writes into OUTDIR (default: analysis/logs/<log_stem>_csv/, gitignored):
     engagement.csv  one row per engagement score (every ~5s)
     emotion.csv     one row per emotion poll, incl. no-face rows (every ~5s)
     speech.csv      user/robot speech segments (start, end, duration)
@@ -353,7 +353,7 @@ def main() -> None:
     parser.add_argument("-o", "--out-dir", type=Path, default=None, help="Output directory for the CSVs")
     args = parser.parse_args()
 
-    out_dir = args.out_dir or args.log.parent / f"{args.log.stem}_csv"
+    out_dir = args.out_dir or Path(__file__).resolve().parent / "logs" / f"{args.log.stem}_csv"
     summary = parse_log(args.log, out_dir)
     print(json.dumps(summary, indent=2))
     print(f"\nWrote CSVs to {out_dir}/")
