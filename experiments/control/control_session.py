@@ -164,8 +164,11 @@ class ControlSession:
         logger.info("CONTROL: session-over announcement suppressed")
 
     def receive_task_context(self, text: str) -> None:
-        """Accept a participant context submission — logged, never forwarded (no model exists here)."""
-        logger.info("CONTROL: task context received but not forwarded: %s", text)
+        """Accept a participant context submission — logged, never forwarded (no model exists here).
+
+        Newlines escaped so multi-line pastes land on one log line (parse_app_log.py).
+        """
+        logger.info("CONTROL: task context received but not forwarded: %s", text.replace("\n", "\\n"))
 
     # ── Emotion loop — mirrors HuggingFaceRealtimeHandler._emotion_poll_loop ──
 

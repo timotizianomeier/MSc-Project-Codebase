@@ -650,14 +650,18 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
     async def send_user_text(self, text: str) -> None:
         """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
+        # Newlines escaped so multi-line pastes land on ONE log line — the log is
+        # the post-study dataset and the parser is line-based (parse_app_log.py).
+        loggable = text.replace("\n", "\\n")
         if not self.session_gate_open():
-            logger.info("Session gate: task context rejected (session not active): %s", text)
+            logger.info("Session gate: task context rejected (session not active): %s", loggable)
             return
         if config.CONTROL_MODE:
             # Control condition: accept the submission (identical participant procedure)
             # and keep the text in the log, but never wake the model with it.
-            logger.info("CONTROL: task context received but not forwarded: %s", text)
+            logger.info("CONTROL: task context received but not forwarded: %s", loggable)
             return
+        logger.info("Task context received: %s", loggable)
         framed = f"{TASK_CONTEXT_PROMPT}\n\n{text}"
         try:
             await self.say(framed)
