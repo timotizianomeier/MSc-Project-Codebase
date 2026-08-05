@@ -12,6 +12,7 @@ logs/recordings/
 analysis/logs/
 experiments/**/results_*
 imperial-gpu-cluster.md
+study-day-runbook.md
 study_llm.sbatch
 sandbox_s2s.sbatch
 v2_gateway_tunnels.sh
