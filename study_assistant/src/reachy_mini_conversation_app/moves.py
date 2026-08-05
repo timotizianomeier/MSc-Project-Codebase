@@ -31,6 +31,7 @@ import threading
 from queue import Empty, Queue
 from typing import Any, Dict, Tuple
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -54,11 +55,15 @@ FullBodyPose = Tuple[NDArray[np.float32], Tuple[float, float], float]  # (head_p
 
 
 class AntennaHeartbeatMove(Move):  # type: ignore
-    """Brief antenna flutter used as an idle 'alive' cue (study body-double signal).
+    """Brief antenna-only motion used as an idle 'alive' cue (study body-double signal).
 
     Head and body hold their current pose for the whole move — only the antennas
-    animate, so the camera stays perfectly still. The flutter starts and ends
+    animate, so the camera stays perfectly still. Every waveform starts and ends
     exactly at the held antenna positions (sine envelope), so there is no snap.
+
+    The default parameters reproduce the original mirrored two-bounce flutter;
+    `gains`/`bounces`/`stagger_s` parameterize the subtle idle variations
+    (see make_idle_antenna_move).
     """
 
     def __init__(
@@ -66,13 +71,33 @@ class AntennaHeartbeatMove(Move):  # type: ignore
         hold_pose: FullBodyPose,
         duration: float = 1.2,
         amplitude_rad: float = 0.25,
+        gains: Tuple[float, float] = (-1.0, 1.0),
+        bounces: float = 2.0,
+        stagger_s: float = 0.0,
+        name: str = "double_flutter",
     ):
-        """Freeze the given pose and animate antennas around it for `duration` seconds."""
+        """Freeze the given pose and animate antennas around it.
+
+        Args:
+            hold_pose: Pose to hold; antennas animate around its antenna values.
+            duration: Seconds of animation per antenna.
+            amplitude_rad: Peak antenna deflection.
+            gains: Per-antenna direction/scale; 0.0 keeps that antenna still.
+            bounces: Full oscillations within the move; 0.5 = one smooth bump.
+            stagger_s: Delay before the RIGHT antenna starts (ripple effect);
+                total move duration grows by this amount.
+            name: Variation label, used for logging only.
+        """
         self._hold_head = hold_pose[0].astype(np.float64)
         self._hold_antennas = np.array(hold_pose[1], dtype=np.float64)
         self._hold_body_yaw = float(hold_pose[2])
-        self._duration = duration
+        self._core_duration = duration
+        self._duration = duration + stagger_s
         self._amplitude = amplitude_rad
+        self._gains = gains
+        self._bounces = bounces
+        self._delays = (0.0, stagger_s)
+        self.name = name
 
     @property
     def duration(self) -> float:
@@ -80,12 +105,48 @@ class AntennaHeartbeatMove(Move):  # type: ignore
         return self._duration
 
     def evaluate(self, t: float) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None, float | None]:
-        """Evaluate the flutter at time t: two mirrored antenna bounces, zero at both ends."""
-        phase = min(max(t / self._duration, 0.0), 1.0)
-        # sin(pi*phase) envelope guarantees rest at start/end; sin(4*pi*phase) gives two bounces.
-        sway = self._amplitude * np.sin(np.pi * phase) * np.sin(4 * np.pi * phase)
-        antennas = self._hold_antennas + np.array([-sway, sway], dtype=np.float64)
+        """Evaluate the waveform at time t; antennas rest at hold values at both ends."""
+        antennas = self._hold_antennas.copy()
+        for i in (0, 1):
+            if self._gains[i] == 0.0:
+                continue
+            phase = min(max((t - self._delays[i]) / self._core_duration, 0.0), 1.0)
+            # sin(pi*phase) envelope guarantees rest at start/end;
+            # sin(2*bounces*pi*phase) sets how many oscillations fit inside it.
+            sway = self._amplitude * np.sin(np.pi * phase) * np.sin(2.0 * self._bounces * np.pi * phase)
+            antennas[i] += self._gains[i] * sway
         return (self._hold_head.copy(), antennas, self._hold_body_yaw)
+
+
+def make_idle_antenna_move(hold_pose: FullBodyPose, rng: random.Random | None = None) -> AntennaHeartbeatMove:
+    """Pick one of the subtle antenna-only idle variations (uniformly at random).
+
+    All variations hold head/body still and rest at the held antenna pose at both
+    ends. Single-antenna variants randomize the side, so the cue never favors one
+    antenna. Amplitudes stay at or below the original flutter's 0.25 rad.
+    """
+    pick: Callable[..., Any] = rng.choice if rng is not None else random.choice
+    kind = str(pick(("double_flutter", "single_flick", "single_twitch", "perk", "ripple")))
+    if kind == "single_flick":
+        # One antenna, one soft bump — a brief ear-flick.
+        side = int(pick((0, 1)))
+        gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
+        return AntennaHeartbeatMove(hold_pose, duration=1.6, amplitude_rad=0.17, gains=gains, bounces=0.5, name=kind)
+    if kind == "single_twitch":
+        # One antenna, two quick mini-bounces — smaller and busier than the flick.
+        side = int(pick((0, 1)))
+        gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
+        return AntennaHeartbeatMove(hold_pose, duration=1.8, amplitude_rad=0.14, gains=gains, bounces=2.0, name=kind)
+    if kind == "perk":
+        # Both antennas rise once and settle — a slow attentive arc.
+        return AntennaHeartbeatMove(hold_pose, duration=3.2, amplitude_rad=0.17, bounces=0.5, name=kind)
+    if kind == "ripple":
+        # Left bump, then right bump slightly delayed — a soft wave across the head.
+        return AntennaHeartbeatMove(
+            hold_pose, duration=2.0, amplitude_rad=0.17, bounces=0.5, stagger_s=0.7, name=kind
+        )
+    # double_flutter: the original mirrored two-bounce flutter, unchanged.
+    return AntennaHeartbeatMove(hold_pose)
 
 
 class BreathingMove(Move):  # type: ignore
@@ -222,7 +283,9 @@ class MovementManager:
     """
 
     # Idle antenna heartbeat cadence: randomized so the cue never feels metronomic.
-    HEARTBEAT_INTERVAL_RANGE_S = (60.0, 120.0)
+    # 10-30s per Nicole's presence-cue feedback (03.08); was 60-120s — revisit if
+    # the user test finds it distracting.
+    HEARTBEAT_INTERVAL_RANGE_S = (10.0, 30.0)
 
     def __init__(
         self,
@@ -621,9 +684,10 @@ class MovementManager:
             if self.state.last_primary_pose is not None
             else (create_head_pose(0, 0, 0, 0, 0, 0, degrees=True), (-0.1745, 0.1745), 0.0)
         )
-        self.move_queue.append(AntennaHeartbeatMove(hold_pose))
+        move = make_idle_antenna_move(hold_pose)
+        self.move_queue.append(move)
         self._next_heartbeat_time = now + random.uniform(*self.HEARTBEAT_INTERVAL_RANGE_S)
-        logger.debug("Antenna heartbeat queued")
+        logger.debug("Antenna heartbeat queued (%s)", move.name)
 
     def _issue_control_command(
         self, head: NDArray[np.float32], antennas: Tuple[float, float], body_yaw: float

@@ -182,6 +182,45 @@ def test_heartbeat_move_never_moves_head_or_body() -> None:
         assert body_yaw == 0.3
 
 
+def test_idle_antenna_variations_hold_invariants() -> None:
+    """Every variation rests at the held pose at both ends, never moves head/body,
+    stays within the flutter's 0.25 rad amplitude, and single-antenna variants
+    keep the other antenna perfectly still."""
+    import random
+
+    from reachy_mini_conversation_app.moves import make_idle_antenna_move
+
+    hold_head = create_head_pose(0, 0, 0, 0, -8, 0, degrees=True)
+    hold = (hold_head, (-0.1745, 0.1745), 0.3)
+
+    seen: set[str] = set()
+    for seed in range(40):
+        move = make_idle_antenna_move(hold, rng=random.Random(seed))
+        seen.add(move.name)
+
+        _, start_antennas, _ = move.evaluate(0.0)
+        _, end_antennas, _ = move.evaluate(move.duration)
+        assert np.allclose(start_antennas, hold[1], atol=1e-9), move.name
+        assert np.allclose(end_antennas, hold[1], atol=1e-9), move.name
+
+        moved = False
+        for step in range(1, 20):
+            t = move.duration * step / 20.0
+            head, antennas, body_yaw = move.evaluate(t)
+            assert np.allclose(head, hold_head), move.name
+            assert body_yaw == 0.3, move.name
+            deflection = np.abs(antennas - np.array(hold[1]))
+            assert np.all(deflection <= 0.25 + 1e-9), move.name
+            if move.name in ("single_flick", "single_twitch"):
+                assert min(deflection) < 1e-9, f"{move.name} moved both antennas"
+            if not np.allclose(antennas, hold[1], atol=1e-3):
+                moved = True
+        assert moved, f"{move.name} never left the hold pose"
+
+    # 40 seeded draws should exercise the full variation set.
+    assert seen == {"double_flutter", "single_flick", "single_twitch", "perk", "ripple"}
+
+
 def test_heartbeat_queues_when_due_and_idle(monkeypatch: pytest.MonkeyPatch) -> None:
     """Enabled + due + fully idle -> exactly one flutter lands in the move queue."""
     from reachy_mini_conversation_app.moves import AntennaHeartbeatMove
