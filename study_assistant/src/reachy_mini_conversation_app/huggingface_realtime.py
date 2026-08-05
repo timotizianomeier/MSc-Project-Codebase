@@ -829,6 +829,9 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                 )
                 self._mark_activity("emotion_intervention_counterfactual")
             else:
+                # Value logged at INFO for post-study extraction — the DEBUG poll
+                # line carries it too, but the trigger must survive INFO-only runs.
+                logger.info("Emotion intervention triggered (negative_share=%.2f)", negative_share)
                 await self._send_emotion_intervention()
             self._emotion_monitor.mark_intervened(now)
 
@@ -902,6 +905,9 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                 )
                 self._mark_activity("engagement_intervention_counterfactual")
             else:
+                # Value logged at INFO for post-study extraction — the DEBUG poll
+                # line carries it too, but the trigger must survive INFO-only runs.
+                logger.info("Engagement intervention triggered (average=%.2f)", average)
                 await self._send_engagement_intervention()
             self._engagement_monitor.mark_intervened(now)
 

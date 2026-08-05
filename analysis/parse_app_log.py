@@ -12,11 +12,14 @@ Writes into OUTDIR (default: analysis/logs/<log_stem>_csv/, gitignored):
     engagement.csv  one row per engagement score (every ~5s)
     emotion.csv     one row per emotion poll, incl. no-face rows (every ~5s)
     speech.csv      user/robot speech segments (start, end, duration)
-    events.csv      discrete events: session start/end, interventions,
+    events.csv      discrete events: session start/end, interventions (with
+                    triggering value; '*_sent' = delivery confirmation, the only
+                    intervention marker in logs from before 05.08),
                     counterfactuals, context submits (with text, newlines
                     escaped as \n; 'context_forwarded' = delivery confirmation,
-                    the only context marker in logs from before 05.08),
-                    transcripts, ws drops
+                    likewise the only context marker pre-05.08), transcripts,
+                    turn latencies (ms), antenna presence cues (variation name
+                    where logged), ws drops
     session.json    session metadata + row counts (parse sanity summary)
 
 Times: `timestamp` is the wall-clock log stamp; `t_session_s` is seconds since
@@ -210,11 +213,36 @@ def parse_log(log_path: Path, out_dir: Path) -> dict[str, object]:
                 )
                 continue
 
+            triggered = re.search(
+                r"(?P<kind>Engagement|Emotion) intervention triggered \((?:average|negative_share)=(?P<value>[\d.]+)\)",
+                msg,
+            )
+            if triggered is not None:
+                add_event(ts, f"intervention_{triggered.group('kind').lower()}", value=float(triggered.group("value")))
+                continue
+            # Delivery confirmations; the only intervention marker in logs from
+            # before 05.08 (which carry no trigger value at INFO level).
             if "Queued engagement intervention prompt" in msg:
-                add_event(ts, "intervention_engagement")
+                add_event(ts, "intervention_engagement_sent")
                 continue
             if "Queued emotion intervention prompt" in msg:
-                add_event(ts, "intervention_emotion")
+                add_event(ts, "intervention_emotion_sent")
+                continue
+
+            latency = re.search(
+                r"Turn latency: (?P<stage>response\.created|first audio delta) (?P<ms>\d+) ms after user transcript",
+                msg,
+            )
+            if latency is not None:
+                stage = "response_created" if latency.group("stage") == "response.created" else "first_audio"
+                add_event(ts, f"turn_latency_{stage}", value=int(latency.group("ms")))
+                continue
+
+            # Antenna presence cues ("body double" dose). Old logs lack the
+            # variation name; the event still counts with an empty detail.
+            antenna = re.search(r"Antenna heartbeat queued(?: \((?P<name>\w+)\))?$", msg)
+            if antenna is not None:
+                add_event(ts, "antenna_cue", detail=antenna.group("name") or "")
                 continue
 
             # Context submissions. Both conditions log the content with newlines
