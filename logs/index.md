@@ -1,5 +1,8 @@
 # app.log index
 
+All pre-study logs (through 05.08.2026, incl. every file referenced below) live
+in `archive/`. The `logs/` root is reserved for study-day data from 06.08 on.
+
 ---
 
 ### Log

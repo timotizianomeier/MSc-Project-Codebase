@@ -9,6 +9,7 @@ __pycache__/
 **/dataset/
 logs/frames/
 logs/recordings/
+logs/recordings-pi/
 analysis/logs/
 experiments/**/results_*
 imperial-gpu-cluster.md
