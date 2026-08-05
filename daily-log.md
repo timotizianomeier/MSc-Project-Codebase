@@ -2,6 +2,47 @@
 
 ---
 
+## 📅 [05.08.2026] — Entry #24
+
+### 🎯 Goals for Today
+- Finalize thresholds under campus conditions
+- Leftover to-do's
+- Further investigation of test run
+- Idle motions
+- Need to add anything to debug log?
+
+---
+
+### 🔬 Findings & Notes
+- 
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [04.08.2026] — Entry #23
 
 ### 🎯 Goals for Today
