@@ -4,8 +4,14 @@
 # dance/stop_dance disabled for study sessions (design 28.07): no spectacle during focused work
 #dance
 #stop_dance
-play_emotion
-stop_emotion
+# play_emotion/stop_emotion disabled 06.08: with breathing+idle motions off (study
+# camera-stability config) an emotion move's end pose is never corrected — a
+# greeting-time play_emotion("welcoming") left the head pitched at the CEILING for
+# two entire sessions (frame-verified), blinding engagement+emotion sensing.
+# Liveliness stays via speech wobble + antenna cues (both pose-neutral).
+# Post-study fix on backlog: return-to-neutral after emotion moves, then re-enable.
+#play_emotion
+#stop_emotion
 #camera
 #do_nothing
 #head_tracking
