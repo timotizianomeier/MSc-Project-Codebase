@@ -41,11 +41,20 @@ def _classify_deepface(frame: NDArray[np.uint8]) -> tuple[str, dict[str, float]]
 
 def _classify_emotiefflib(frame: NDArray[np.uint8]) -> tuple[str, dict[str, float]] | None:
     # Imported lazily: emotiefflib/onnx are opt-in extras (pyproject `emotion`).
+    import os
+
     import cv2
     from emotiefflib.facial_analysis import EmotiEffLibRecognizer
 
     global _emotiefflib_recognizer
     if _emotiefflib_recognizer is None:
+        # Cap classifier parallelism at 2 of the Pi's 4 cores. By default the haar
+        # cascade (and OpenMP-linked runtimes) grab every core for ~100ms per poll,
+        # starving the 60Hz movement loop and audio: 91% of sub-35Hz control-loop
+        # dips in the 05.08 18:03 session coincided with emotion polls (antenna
+        # jitter). Identical outputs, slightly slower poll — it has a ~6s budget.
+        os.environ.setdefault("OMP_NUM_THREADS", "2")
+        cv2.setNumThreads(2)
         _emotiefflib_recognizer = EmotiEffLibRecognizer(engine="onnx", model_name="enet_b0_8_best_vgaf")
 
     # Same haar detection + margin crop as the offline comparison methodology: the
