@@ -5,10 +5,10 @@
 ## 📅 [06.08.2026] — Entry #25
 
 ### 🎯 Goals for Today
-- Finalize thresholds under campus conditions
-- Leftover to-do's
-- Further investigation of test run
-- Analyse sessions under different lighting
+x Finalize thresholds under campus conditions
+x Leftover to-do's
+x Further investigation of test run
+x Analyse sessions under different lighting
 - e2e run
 
 ---
@@ -32,13 +32,16 @@
 
 ### 📦 End of Day Summary
 **Shipped:** 
-- 
+- Finalize thresholds under campus conditions
+- Leftover to-do's
+- Further investigation of test run
+- Analyse sessions under different lighting
 
 **Blockers:**
 - 
 
 **Tomorrow:** 
-- 
+- e2e run
 
 ---
 ---
