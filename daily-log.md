@@ -2,6 +2,47 @@
 
 ---
 
+## 📅 [06.08.2026] — Entry #25
+
+### 🎯 Goals for Today
+- Finalize thresholds under campus conditions
+- Leftover to-do's
+- Further investigation of test run
+- Analyse sessions under different lighting
+- e2e run
+
+---
+
+### 🔬 Findings & Notes
+- 
+
+#### What I tried
+- 
+
+#### What worked
+- 
+
+#### What didn't / open questions
+- 
+
+#### Random thoughts / ideas
+- 
+
+---
+
+### 📦 End of Day Summary
+**Shipped:** 
+- 
+
+**Blockers:**
+- 
+
+**Tomorrow:** 
+- 
+
+---
+---
+
 ## 📅 [05.08.2026] — Entry #24
 
 ### 🎯 Goals for Today
