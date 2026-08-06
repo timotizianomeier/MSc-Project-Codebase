@@ -217,8 +217,9 @@ def test_idle_antenna_variations_hold_invariants() -> None:
                 moved = True
         assert moved, f"{move.name} never left the hold pose"
 
-    # 40 seeded draws should exercise the full variation set.
-    assert seen == {"double_flutter", "single_flick", "single_twitch", "perk", "ripple"}
+    # 40 seeded draws should exercise the full variation set (perk/ripple
+    # retired 06.08: slow arcs step the servos below their smooth regime).
+    assert seen == {"double_flutter", "single_flick", "single_twitch"}
 
 
 def test_heartbeat_queues_when_due_and_idle(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -125,27 +125,22 @@ def make_idle_antenna_move(hold_pose: FullBodyPose, rng: random.Random | None = 
     ends. Single-antenna variants randomize the side, so the cue never favors one
     antenna. Amplitudes stay at or below the original flutter's 0.25 rad.
     """
+    # perk and ripple RETIRED 06.08: their slow single arcs step the servos
+    # visibly even with a healthy ~59Hz control loop (armed-idle hardware test)
+    # — low angular velocity is below the servos' smooth regime. The surviving
+    # quick set was rated smooth on hardware ("the quicker ones are fine").
     pick: Callable[..., Any] = rng.choice if rng is not None else random.choice
-    kind = str(pick(("double_flutter", "single_flick", "single_twitch", "perk", "ripple")))
+    kind = str(pick(("double_flutter", "single_flick", "single_twitch")))
     if kind == "single_flick":
         # One antenna, one soft bump — a brief ear-flick.
         side = int(pick((0, 1)))
         gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
         return AntennaHeartbeatMove(hold_pose, duration=1.6, amplitude_rad=0.17, gains=gains, bounces=0.5, name=kind)
     if kind == "single_twitch":
-        # One antenna, two slow mini-bounces — smaller and busier than the flick.
+        # One antenna, two mini-bounces — smaller and busier than the flick.
         side = int(pick((0, 1)))
         gains = (-1.0, 0.0) if side == 0 else (0.0, 1.0)
         return AntennaHeartbeatMove(hold_pose, duration=2.4, amplitude_rad=0.14, gains=gains, bounces=2.0, name=kind)
-    if kind == "perk":
-        # Both antennas rise once and settle — a slow attentive arc. 2.0s, not
-        # slower: below ~0.27 rad/s peak the servos visibly step (05.08 hardware test).
-        return AntennaHeartbeatMove(hold_pose, duration=2.0, amplitude_rad=0.17, bounces=0.5, name=kind)
-    if kind == "ripple":
-        # Left bump, then right bump slightly delayed — a soft wave across the head.
-        return AntennaHeartbeatMove(
-            hold_pose, duration=1.4, amplitude_rad=0.17, bounces=0.5, stagger_s=0.5, name=kind
-        )
     # double_flutter: the mirrored two-bounce flutter — slowed and shrunk from the
     # original 1.2s/0.25rad for the study's calmer presence cue (05.08 user test).
     return AntennaHeartbeatMove(hold_pose, duration=2.4, amplitude_rad=0.18, name=kind)
