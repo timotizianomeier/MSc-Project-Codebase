@@ -101,3 +101,22 @@ def test_should_intervene_false_when_intervention_cooldown_not_elapsed() -> None
     result = monitor.should_intervene(now=110.0, response_done=True, last_activity_time=0.0)
 
     assert result is False
+
+
+def test_should_intervene_false_on_sparse_window() -> None:
+    """A lone high-negative frame after a no-face stretch must not fire (05.08 field bug).
+
+    No-face polls record nothing, so a ~30s no-face run drains the window; the
+    next single sad frame would otherwise BE the window average. MIN_SAMPLES
+    requires sustained evidence before the signal may fire.
+    """
+    monitor = EmotionMonitor()
+    monitor.record(0.65, timestamp=100.0)  # the exact 18:03-session cue value
+
+    assert monitor.should_intervene(now=100.0, response_done=True, last_activity_time=0.0) is False
+
+    monitor.record(0.7, timestamp=106.0)  # still only 2 samples
+    assert monitor.should_intervene(now=106.0, response_done=True, last_activity_time=0.0) is False
+
+    monitor.record(0.7, timestamp=112.0)  # 3rd sample = 15s of evidence -> may fire
+    assert monitor.should_intervene(now=112.0, response_done=True, last_activity_time=0.0) is True

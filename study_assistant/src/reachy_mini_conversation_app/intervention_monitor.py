@@ -22,6 +22,12 @@ class InterventionMonitor(ABC, Generic[SampleValueT]):
     WINDOW_SECONDS: ClassVar[float] = 30.0
     INTERACTION_COOLDOWN_SECONDS: ClassVar[float] = 60.0
     INTERVENTION_COOLDOWN_SECONDS: ClassVar[float] = 60.0
+    # Minimum samples the window must hold before the signal may fire. Guards
+    # against sparse-evidence artifacts: emotion polls record nothing on no-face
+    # frames, so after a ~30s no-face stretch a SINGLE sad frame would otherwise
+    # be the entire window average (both 05.08 false-positive cues were exactly
+    # this). 3 samples = 15s of actual evidence at the 5s poll cadence.
+    MIN_SAMPLES: ClassVar[int] = 3
 
     def __init__(self) -> None:
         """Initialize an empty rolling window with no prior trigger."""
@@ -40,7 +46,9 @@ class InterventionMonitor(ABC, Generic[SampleValueT]):
         ...
 
     def should_intervene(self, now: float, response_done: bool, last_activity_time: float) -> bool:
-        """Return whether the signal, an idle conversation, and both cooldowns all hold."""
+        """Return whether the signal, sufficient evidence, an idle conversation, and both cooldowns all hold."""
+        if len(self._samples) < self.MIN_SAMPLES:
+            return False
         if not self._signal_active():
             return False
         if not response_done:
