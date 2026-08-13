@@ -54,6 +54,13 @@ FILE_PATTERNS = {
     "post": "post-session-*.csv",
 }
 
+# Likert layout: question rows per page. Pagination is emitted explicitly
+# (\newpage) so the answer-scale labels can be shown once per page — bold, on
+# the top edge of the first chart — and omitted on the rows below it. 5 rows
+# of 3.4cm charts + spacing fit comfortably on an a4 12pt page with 1in
+# margins; lower this if a template change makes pages overflow.
+LIKERT_ROWS_PER_PAGE = 5
+
 # Participants to INCLUDE (whitelist). Compared after PID normalisation
 # (leading zeros stripped, so "0001" == "1"). Empty set = include everyone.
 INCLUDE_PIDS: set[str] = {"11", "12", "13", "14", "15", "16", "17"}
@@ -381,10 +388,16 @@ def header_comment(sources: list[str]) -> str:
 
 def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
                   width: str = "0.55\\textwidth", height: str = "3.4cm",
-                  rotate_labels: bool = True, single_series: bool = False) -> str:
+                  rotate_labels: bool = True, single_series: bool = False,
+                  label_mode: str = "default", show_legend: bool = True) -> str:
     """One pgfplots ybar chart: x = answer categories, bars stacked
     ADHD (bottom) + Control (top), explicit per-segment count labels and a
-    total label above each bar. `cats` is [(value, display_label), ...]."""
+    total label above each bar. `cats` is [(value, display_label), ...].
+
+    label_mode: "default" — tick labels below the axis (rotated per
+    rotate_labels); "header" — bold labels on the TOP edge, wrapped one/two
+    words per line (page-header chart of a likert batch); "none" — no tick
+    labels (charts below a header chart on the same page)."""
     labels = [esc(lbl) for _, lbl in cats]
     sym = ",".join("{" + l + "}" for l in labels)
     a = [int(counts_by_group.get(GROUP_ADHD, {}).get(v, 0)) for v, _ in cats]
@@ -395,9 +408,19 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
     coords_a = " ".join(f"({{{l}}},{v})" for l, v in zip(labels, a))
     coords_c = " ".join(f"({{{l}}},{v})" for l, v in zip(labels, c))
 
-    xtick_style = ("x tick label style={rotate=28, anchor=east, font=\\scriptsize},"
-                   if rotate_labels else
-                   "x tick label style={font=\\scriptsize},")
+    if label_mode == "header":
+        # Wrapped (word-per-line) bold labels on the top edge of the axis.
+        xtick_style = ("xticklabel pos=upper, x tick label style="
+                       "{font=\\scriptsize\\bfseries, align=center, text width=1.55cm},")
+    elif label_mode == "none":
+        xtick_style = "xticklabels={},"
+    elif rotate_labels:
+        xtick_style = "x tick label style={rotate=28, anchor=east, font=\\scriptsize},"
+    else:
+        xtick_style = "x tick label style={font=\\scriptsize},"
+
+    # Header charts carry the top labels, so lift the legend clear of them.
+    legend_at = "(1,1.45)" if label_mode == "header" else "(1,1.04)"
 
     nodes = []
     for l, av, cv, tot in zip(labels, a, c, totals):
@@ -415,11 +438,11 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
                  f"coordinates {{{coords_a}}};")
         legend = ""
     else:
+        legend_cmd = "\n    \\legend{ADHD, Control}" if show_legend else ""
         plots = (f"\\addplot[ybar, fill={ADHD_COLOR}, draw={ADHD_COLOR}!70!black] "
                  f"coordinates {{{coords_a}}};\n"
                  f"    \\addplot[ybar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] "
-                 f"coordinates {{{coords_c}}};\n"
-                 f"    \\legend{{ADHD, Control}}")
+                 f"coordinates {{{coords_c}}};{legend_cmd}")
 
     return f"""\\begin{{tikzpicture}}
   \\begin{{axis}}[
@@ -429,7 +452,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
     ymin=0, ymax={ymax:.1f}, ytick=\\empty, axis y line=none,
     axis x line*=bottom, bar width=11pt,
     enlarge x limits={{abs=0.6cm}},
-    legend style={{font=\\tiny, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
+    legend style={{font=\\tiny, at={{{legend_at}}}, anchor=south east, draw=none, fill=none}},
     legend columns=2,
     legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
   ]
@@ -570,18 +593,31 @@ SLIDER_BIN_ORDER = [(f"{lo}--{lo + 9}", f"{lo}--{lo + 9}") for lo in range(0, 90
 def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
                       with_stats=False):
     """A block of question rows (text + stacked chart), optionally followed by
-    per-question summary-statistics tables (ranks 1..k)."""
-    parts = [f"\\subsection*{{{esc(title)}}}\n"]
+    per-question summary-statistics tables (ranks 1..k).
+
+    Pagination is explicit so answer-scale labels appear exactly once per
+    page: the instrument starts on a fresh page, rows are batched
+    LIKERT_ROWS_PER_PAGE per page with \\newpage between batches, and only
+    the first chart of each batch carries the (bold, top-edge) labels."""
+    parts = [f"\\newpage\n\\subsection*{{{esc(title)}}}\n"]
     stats_parts = []
+    row_in_page = 0
     for i in range(1, n_items + 1):
         col = f"{prefix}{i}"
         if col not in df.columns:
             print(f"  WARNING: column {col} missing — skipped.")
             continue
+        if row_in_page == LIKERT_ROWS_PER_PAGE:
+            parts.append("\\newpage\n")
+            row_in_page = 0
         cats = category_order(observed_values(df, col), hint)
         counts = counts_for(df, col, groups)
-        chart = stacked_chart(counts, cats)
+        chart = stacked_chart(
+            counts, cats, width="\\linewidth",
+            label_mode="header" if row_in_page == 0 else "none",
+            show_legend=(row_in_page == 0))
         parts.append(question_block(f"Q{i}", strip_stem(qtext.get(col, col)), chart))
+        row_in_page += 1
         if with_stats:
             vals = {}
             for g in (GROUP_ADHD, GROUP_CONTROL):
