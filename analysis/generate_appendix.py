@@ -585,7 +585,7 @@ def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
     body = "\n".join(rows)
     return f"""\\noindent\\textit{{{esc(title)}}}\\par\\nopagebreak\\vspace{{0.3em}}
 {{\\small
-\\begin{{longtable}}{{p{{0.47\\textwidth}} p{{0.47\\textwidth}}}}
+\\begin{{longtable}}{{p{{0.47\\linewidth}} p{{0.47\\linewidth}}}}
 \\toprule
 \\textbf{{ADHD}} & \\textbf{{Control}} \\\\
 \\midrule
@@ -735,8 +735,9 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
 def open_ended_tables(df, qtext, groups, cols, title):
     """Open-ended sections render in LANDSCAPE (pdflscape): the two-column
     verbatim-answer tables use the page's long edge, which long prose needs.
-    Inside the landscape environment \\textwidth is the landscape width, so
-    the 0.47\\textwidth columns stretch automatically. Each question gets a
+    Inside the landscape environment \\linewidth is the landscape width
+    (\\textwidth is NOT updated by pdflscape), so the answer tables size
+    their columns with \\linewidth to stretch automatically. Each question gets a
     short bold subheader from OE_HEADERS (skipped if it would just repeat
     the section title), with the full question text below it."""
     parts = ["\\begin{landscape}\n" f"\\subsection*{{{esc(title)}}}\n"]
