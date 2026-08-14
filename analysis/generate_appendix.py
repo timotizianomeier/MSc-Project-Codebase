@@ -539,6 +539,28 @@ def summary_stats_table(values_by_group: dict[str, pd.Series], caption: str) -> 
 """
 
 
+def category_table(df, col, groups, cats) -> str:
+    """Simple categorical count table (rows = answer categories, columns =
+    ADHD / Control / Overall) — for demographics where a chart is overkill."""
+    counts = counts_for(df, col, groups)
+    rows = []
+    for v, lbl in cats:
+        a_n = int(counts[GROUP_ADHD].get(v, 0))
+        c_n = int(counts[GROUP_CONTROL].get(v, 0))
+        rows.append(f"{esc(lbl)} & {a_n} & {c_n} & {a_n + c_n} \\\\")
+    body = "\n".join(rows)
+    return f"""\\begin{{center}}\\small
+\\begin{{tabular}}{{lrrr}}
+\\toprule
+ & ADHD & Control & Overall \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}
+\\end{{center}}
+"""
+
+
 def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
                        title: str) -> str:
     """Two-column longtable, ADHD | Control, one answer per row with PID."""
@@ -604,8 +626,10 @@ def bin_slider(df: pd.DataFrame, col: str) -> pd.DataFrame:
     return df
 
 
-SLIDER_BIN_ORDER = [(f"{lo}--{lo + 9}", f"{lo}--{lo + 9}") for lo in range(0, 90, 10)] + \
-                   [("90--100", "90--100")]
+# Bin values match bin_slider's labels; display labels are the bin LOWER
+# EDGES so the axis reads as steps of ten (the "90" bin includes 100).
+SLIDER_BIN_ORDER = [(f"{lo}--{lo + 9}", str(lo)) for lo in range(0, 90, 10)] + \
+                   [("90--100", "90")]
 
 
 # ============================================================================
@@ -662,17 +686,29 @@ def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
 
 
 def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
-    """TLX-style 0-100 sliders: binned stacked histogram per dimension."""
-    parts = [f"\\subsection*{{{esc(title)}}}\n"]
+    """TLX-style 0-100 sliders: binned grouped histogram per dimension.
+    Same page discipline as the likert instruments: fresh page, full-width
+    charts, axis labels (bin lower edges, steps of ten) only below the last
+    chart of each page, legend on the first."""
+    parts = [f"\\newpage\n\\subsection*{{{esc(title)}}}\n"]
     stats_parts = []
-    for col in cols:
-        if col not in df.columns:
-            print(f"  WARNING: column {col} missing — skipped.")
-            continue
+    present = [c for c in cols if c in df.columns]
+    for c in cols:
+        if c not in present:
+            print(f"  WARNING: column {c} missing — skipped.")
+    for pos, col in enumerate(present):
+        row_in_page = pos % LIKERT_ROWS_PER_PAGE
+        if pos and row_in_page == 0:
+            parts.append("\\newpage\n")
+        last_on_page = (row_in_page == LIKERT_ROWS_PER_PAGE - 1
+                        or pos == len(present) - 1)
         dfb = bin_slider(df, col)
         counts = counts_for(dfb, col + "_BIN", groups)
-        chart = stacked_chart(counts, SLIDER_BIN_ORDER)
-        name = strip_stem(qtext.get(col, col)).split(" - ")[0]
+        chart = stacked_chart(
+            counts, SLIDER_BIN_ORDER, width="\\linewidth",
+            height=LIKERT_CHART_HEIGHT,
+            label_mode="footer" if last_on_page else "none",
+            show_legend=(row_in_page == 0))
         dim = qtext.get(col, col).split(" - ")[0]
         parts.append(question_block(dim, "", chart))
         if with_stats or True:  # sliders always get stats — cheap and useful
@@ -745,10 +781,7 @@ def build_pre_study(pre, qtext, groups, src):
     # GENDER
     out.append("\\subsection*{Gender}\n")
     cats = category_order(observed_values(pre, "PRE_GENDER"))
-    out.append("\\begin{center}\n" +
-               stacked_chart(counts_for(pre, "PRE_GENDER", groups), cats,
-                             width="0.8\\textwidth", height="4.2cm") +
-               "\n\\end{center}\n")
+    out.append(category_table(pre, "PRE_GENDER", groups, cats))
     selfdesc = pre["PRE_GENDER_4_TEXT"].dropna() if "PRE_GENDER_4_TEXT" in pre else []
     if len(selfdesc):
         out.append("\\noindent\\footnotesize Self-described: " +
@@ -766,11 +799,7 @@ def build_pre_study(pre, qtext, groups, src):
     # LEVEL
     out.append("\\subsection*{Level of study}\n")
     cats = category_order(observed_values(pre, "PRE_LEVEL"))
-    out.append("\\begin{center}\n" +
-               stacked_chart(counts_for(pre, "PRE_LEVEL", groups), cats,
-                             width="0.7\\textwidth", height="4.2cm",
-                             rotate_labels=False) +
-               "\n\\end{center}\n")
+    out.append(category_table(pre, "PRE_LEVEL", groups, cats))
 
     # FIELD
     fld = {GROUP_ADHD: [], GROUP_CONTROL: []}
@@ -781,20 +810,12 @@ def build_pre_study(pre, qtext, groups, src):
     out.append("\\subsection*{Field of study}\n")
     out.append(text_answers_table(fld, "Field of study (verbatim)."))
 
-    # DIAGNOSIS + SUPPORT (simple histograms, overall)
+    # DIAGNOSIS + SUPPORT (simple count tables)
     for col, ttl in [("PRE_ADHD_DX", "Formal ADHD diagnosis"),
                      ("PRE_ADHD_SUPPORT", "Support / accommodations")]:
         out.append(f"\\subsection*{{{ttl}}}\n")
         cats = category_order(observed_values(pre, col))
-        # merge groups into a single series for the simple histogram
-        merged = counts_for(pre, col, groups)
-        single = {GROUP_ADHD: {v: merged[GROUP_ADHD].get(v, 0) + merged[GROUP_CONTROL].get(v, 0)
-                               for v, _ in cats}}
-        out.append("\\begin{center}\n" +
-                   stacked_chart(single, cats, width="0.55\\textwidth",
-                                 height="3.6cm", rotate_labels=False,
-                                 single_series=True) +
-                   "\n\\end{center}\n")
+        out.append(category_table(pre, col, groups, cats))
 
     out.append(likert_instrument(pre, qtext, groups, "PRE_NARS_", 14,
                                  "NARS — Negative Attitudes towards Robots Scale",
