@@ -59,10 +59,10 @@ FILE_PATTERNS = {
 # Likert layout: question rows per page. Pagination is emitted explicitly
 # (\newpage) so the answer-scale labels can be shown once per page — bold,
 # below the LAST chart of the page — and omitted on the rows above it.
-# 8 rows only fit with the reduced chart height below; if a template change
-# makes pages overflow, lower the row count or the height.
-LIKERT_ROWS_PER_PAGE = 8
-LIKERT_CHART_HEIGHT = "2.2cm"
+# 4 rows of 4.4cm charts + 1em row gaps fit an a4 12pt page with 1in
+# margins; lower the row count or height if a template change overflows.
+LIKERT_ROWS_PER_PAGE = 4
+LIKERT_CHART_HEIGHT = "4.4cm"
 
 # Run with --sync to also copy the three fragments into the thesis repo's
 # apx-subfiles/ folder, commit, and push (then in Overleaf: Menu -> GitHub ->
@@ -400,6 +400,7 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{pdflscape}
+\usepackage{paracol}
 \usepackage{xcolor}
 \definecolor{ApxADHD}{RGB}{68,119,170}    % Tol blue
 \definecolor{ApxControl}{RGB}{204,102,17} % Tol orange (darker, prints well)
@@ -478,7 +479,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
 
     return f"""\\begin{{tikzpicture}}
   \\begin{{axis}}[
-    {bar_opts}, width={width}, height={height},
+    {bar_opts}, scale only axis, width={width}, height={height},
     symbolic x coords={{{sym}}}, xtick=data,
     {xtick_style}
     ymin=0, ymax={ymax:.1f}, ytick=\\empty, axis y line=none,
@@ -494,6 +495,52 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
 \\end{{tikzpicture}}"""
 
 
+def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
+                 label_mode: str, show_legend: bool) -> str:
+    """TLX histogram on a true NUMERIC 0-100 axis: grouped bars at the bin
+    centres (5, 15, ..., 95), ticks at the bin edges 0,10,...,100 — so the
+    100 label exists and the plain number labels hug the axis (no wrapped
+    text-width box like the likert footer labels need)."""
+    bins = [(f"{lo}--{lo + 9}", lo + 5) for lo in range(0, 90, 10)] + \
+           [("90--100", 95)]
+    a = [int(counts_by_group.get(GROUP_ADHD, {}).get(k, 0)) for k, _ in bins]
+    c = [int(counts_by_group.get(GROUP_CONTROL, {}).get(k, 0)) for k, _ in bins]
+    ymax = max(max(a + c), 1) * 1.35 + 0.5
+    coords_a = " ".join(f"({x},{v})" for (_, x), v in zip(bins, a))
+    coords_c = " ".join(f"({x},{v})" for (_, x), v in zip(bins, c))
+
+    if label_mode == "footer":
+        xtick_style = "x tick label style={font=\\scriptsize\\bfseries},"
+    else:
+        xtick_style = "xticklabels={},"
+
+    nodes = []
+    for (_, x), av, cv in zip(bins, a, c):
+        if av > 0:
+            nodes.append(f"\\node[font=\\tiny, above, xshift=-5pt] at (axis cs:{x},{av}) {{{av}}};")
+        if cv > 0:
+            nodes.append(f"\\node[font=\\tiny, above, xshift=5pt] at (axis cs:{x},{cv}) {{{cv}}};")
+    nodes_tex = "\n    ".join(nodes)
+    legend_cmd = "\n    \\legend{ADHD, Control}" if show_legend else ""
+
+    return f"""\\begin{{tikzpicture}}
+  \\begin{{axis}}[
+    ybar=2pt, bar width=8pt, scale only axis, width={width}, height={height},
+    xmin=-2, xmax=102, xtick={{0,10,...,100}},
+    {xtick_style}
+    ymin=0, ymax={ymax:.1f}, ytick=\\empty, axis y line=none,
+    axis x line*=bottom,
+    legend style={{font=\\tiny, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
+    legend columns=2,
+    legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
+  ]
+    \\addplot[ybar, fill={ADHD_COLOR}, draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};
+    \\addplot[ybar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};{legend_cmd}
+    {nodes_tex}
+  \\end{{axis}}
+\\end{{tikzpicture}}"""
+
+
 def question_block(qnum_label: str, qtext: str, chart: str) -> str:
     """Question text (left) next to its chart (right)."""
     return f"""\\noindent
@@ -503,7 +550,7 @@ def question_block(qnum_label: str, qtext: str, chart: str) -> str:
 \\begin{{minipage}}[c]{{0.58\\textwidth}}
   {chart}
 \\end{{minipage}}
-\\par\\vspace{{0.5em}}
+\\par\\vspace{{1em}}
 """
 
 
@@ -572,28 +619,33 @@ def category_table(df, col, groups, cats) -> str:
 
 
 def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
-                       title: str) -> str:
-    """Two-column longtable, ADHD | Control, one answer per row with PID."""
+                       title: str, header: str | None = None) -> str:
+    """Two INDEPENDENT columns (paracol), ADHD left / Control right. Unlike
+    a table, each column flows on its own: answers stack with a uniform gap
+    per column, so a 3-line answer on one side never forces blank space
+    into the other. paracol keeps the two columns page-synced and breaks
+    across pages like normal text."""
+    def column(items):
+        if not items:
+            return "\\textit{--}"
+        return "\n\\par\\vspace{0.9em}\n".join(
+            f"\\textbf{{P{esc(pid)}:}} {esc(ans)}" for pid, ans in items)
+
     a = answers_by_group.get(GROUP_ADHD, [])
     c = answers_by_group.get(GROUP_CONTROL, [])
-    n = max(len(a), len(c))
-    rows = []
-    for i in range(n):
-        left = f"\\textbf{{P{esc(a[i][0])}:}} {esc(a[i][1])}" if i < len(a) else ""
-        right = f"\\textbf{{P{esc(c[i][0])}:}} {esc(c[i][1])}" if i < len(c) else ""
-        rows.append(f"{left} & {right} \\\\[3pt]")
-    body = "\n".join(rows)
-    return f"""\\noindent\\textit{{{esc(title)}}}\\par\\nopagebreak\\vspace{{0.3em}}
+    # Inline heading: bold short header; italic question on the SAME line.
+    head = (f"\\textbf{{{esc(header)}}}; \\textit{{{esc(title)}}}" if header
+            else f"\\textit{{{esc(title)}}}")
+    return f"""\\noindent{head}\\par\\nopagebreak\\vspace{{0.4em}}
 {{\\small
-\\begin{{longtable}}{{p{{0.47\\linewidth}} p{{0.47\\linewidth}}}}
-\\toprule
-\\textbf{{ADHD}} & \\textbf{{Control}} \\\\
-\\midrule
-\\endhead
-{body}
-\\bottomrule
-\\end{{longtable}}}}
-\\vspace{{0.6em}}
+\\begin{{paracol}}{{2}}
+\\textbf{{ADHD}}\\par\\nopagebreak\\vspace{{0.5em}}
+{column(a)}
+\\switchcolumn
+\\textbf{{Control}}\\par\\nopagebreak\\vspace{{0.5em}}
+{column(c)}
+\\end{{paracol}}}}
+\\vspace{{0.3em}}
 """
 
 
@@ -634,12 +686,6 @@ def bin_slider(df: pd.DataFrame, col: str) -> pd.DataFrame:
                               labels=labels)
     df[col + "_BIN"] = df[col + "_BIN"].astype(str).replace("nan", np.nan)
     return df
-
-
-# Bin values match bin_slider's labels; display labels are the bin LOWER
-# EDGES so the axis reads as steps of ten (the "90" bin includes 100).
-SLIDER_BIN_ORDER = [(f"{lo}--{lo + 9}", str(lo)) for lo in range(0, 90, 10)] + \
-                   [("90--100", "90")]
 
 
 # ============================================================================
@@ -714,21 +760,21 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
                         or pos == len(present) - 1)
         dfb = bin_slider(df, col)
         counts = counts_for(dfb, col + "_BIN", groups)
-        chart = stacked_chart(
-            counts, SLIDER_BIN_ORDER, width="\\linewidth",
-            height=LIKERT_CHART_HEIGHT,
+        chart = slider_chart(
+            counts, width="\\linewidth", height=LIKERT_CHART_HEIGHT,
             label_mode="footer" if last_on_page else "none",
             show_legend=(row_in_page == 0))
         dim = qtext.get(col, col).split(" - ")[0]
         parts.append(question_block(dim, "", chart))
-        if with_stats or True:  # sliders always get stats — cheap and useful
+        if with_stats:
             vals = {}
             for g in (GROUP_ADHD, GROUP_CONTROL):
                 pids = [p for p, gg in groups.items() if gg == g]
                 vals[g] = pd.to_numeric(df[df["PID"].isin(pids)][col], errors="coerce")
             stats_parts.append(summary_stats_table(vals, f"{dim} (0--100)"))
-    parts.append("\\subsubsection*{Summary statistics}\n")
-    parts.extend(stats_parts)
+    if stats_parts:
+        parts.append("\\subsubsection*{Summary statistics}\n")
+        parts.extend(stats_parts)
     return "\n".join(parts)
 
 
@@ -754,9 +800,10 @@ def open_ended_tables(df, qtext, groups, cols, title):
         if not (answers[GROUP_ADHD] or answers[GROUP_CONTROL]):
             continue
         header = OE_HEADERS.get(col)
-        if header and header.lower() != title.lower():
-            parts.append(f"\\subsubsection*{{{esc(header)}}}\n")
-        parts.append(text_answers_table(answers, qtext.get(col, col)))
+        if header and header.lower() == title.lower():
+            header = None  # would just repeat the section title
+        parts.append(text_answers_table(answers, qtext.get(col, col),
+                                        header=header))
         wrote_any = True
     if not wrote_any:
         return ""
@@ -791,7 +838,7 @@ def build_pre_study(pre, qtext, groups, src):
 
     # GENDER
     out.append("\\subsection*{Gender}\n")
-    cats = category_order(observed_values(pre, "PRE_GENDER"))
+    cats = category_order(observed_values(pre, "PRE_GENDER"), "GENDER")
     out.append(category_table(pre, "PRE_GENDER", groups, cats))
     selfdesc = pre["PRE_GENDER_4_TEXT"].dropna() if "PRE_GENDER_4_TEXT" in pre else []
     if len(selfdesc):
@@ -809,7 +856,7 @@ def build_pre_study(pre, qtext, groups, src):
 
     # LEVEL
     out.append("\\subsection*{Level of study}\n")
-    cats = category_order(observed_values(pre, "PRE_LEVEL"))
+    cats = category_order(observed_values(pre, "PRE_LEVEL"), "LEVEL")
     out.append(category_table(pre, "PRE_LEVEL", groups, cats))
 
     # FIELD
@@ -825,7 +872,7 @@ def build_pre_study(pre, qtext, groups, src):
     for col, ttl in [("PRE_ADHD_DX", "Formal ADHD diagnosis"),
                      ("PRE_ADHD_SUPPORT", "Support / accommodations")]:
         out.append(f"\\subsection*{{{ttl}}}\n")
-        cats = category_order(observed_values(pre, col))
+        cats = category_order(observed_values(pre, col), "YESNO")
         out.append(category_table(pre, col, groups, cats))
 
     out.append(likert_instrument(pre, qtext, groups, "PRE_NARS_", 14,
@@ -863,17 +910,14 @@ def build_post_robot(post, qtext, groups, src):
     out.append(slider_instrument(post, qtext, groups, tlx_cols,
                                  "NASA-TLX (robot session)"))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
-                                 "Body doubling / presence", hint="LIKERT5",
-                                 with_stats=True))
+                                 "Body doubling / presence", hint="LIKERT5"))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_INATT_", 5,
-                                 "Inattention detection", hint="LIKERT5",
-                                 with_stats=True))
+                                 "Inattention detection", hint="LIKERT5"))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_CONTEXT_", 4,
                                  "Context-aware / task-aware support",
-                                 hint="LIKERT5", with_stats=True))
+                                 hint="LIKERT5"))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_OVERALL_", 3,
-                                 "Overall experience", hint="LIKERT5",
-                                 with_stats=True))
+                                 "Overall experience", hint="LIKERT5"))
     oe_cols = [f"POST_OE_{i:02d}" for i in range(1, 13)]
     out.append(open_ended_tables(post, qtext, groups, oe_cols,
                                  "Open-ended questions"))
