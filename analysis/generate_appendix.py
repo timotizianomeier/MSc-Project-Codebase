@@ -59,10 +59,10 @@ FILE_PATTERNS = {
 # Likert layout: question rows per page. Pagination is emitted explicitly
 # (\newpage) so the answer-scale labels can be shown once per page — bold,
 # below the LAST chart of the page — and omitted on the rows above it.
-# 4 rows of 4.4cm charts + 1em row gaps fit an a4 12pt page with 1in
+# 8 rows of 2.2cm charts + 1em row gaps fit an a4 12pt page with 1in
 # margins; lower the row count or height if a template change overflows.
-LIKERT_ROWS_PER_PAGE = 4
-LIKERT_CHART_HEIGHT = "4.4cm"
+LIKERT_ROWS_PER_PAGE = 8
+LIKERT_CHART_HEIGHT = "2.2cm"
 
 # Run with --sync to also copy the three fragments into the thesis repo's
 # apx-subfiles/ folder, commit, and push (then in Overleaf: Menu -> GitHub ->
@@ -786,7 +786,12 @@ def open_ended_tables(df, qtext, groups, cols, title):
     their columns with \\linewidth to stretch automatically. Each question gets a
     short bold subheader from OE_HEADERS (skipped if it would just repeat
     the section title), with the full question text below it."""
-    parts = ["\\begin{landscape}\n" f"\\subsection*{{{esc(title)}}}\n"]
+    # pdflscape only updates \linewidth on landscape pages; paracol computes
+    # its column widths from \textwidth, so align the two INSIDE the
+    # environment (group-scoped — portrait pages are unaffected).
+    parts = ["\\begin{landscape}\n"
+             "\\setlength{\\textwidth}{\\linewidth}\n"
+             f"\\subsection*{{{esc(title)}}}\n"]
     wrote_any = False
     for col in cols:
         if col not in df.columns:
