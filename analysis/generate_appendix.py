@@ -62,6 +62,23 @@ FILE_PATTERNS = {
 LIKERT_ROWS_PER_PAGE = 8
 LIKERT_CHART_HEIGHT = "2.2cm"
 
+# Short subheaders for the open-ended questions (the full question text is
+# still printed above each answer table). Keys are CSV column names.
+OE_HEADERS = {
+    "POST_OE_01": "Task description",
+    "POST_OE_02": "Overall experience",
+    "POST_OE_03": "Body doubling / presence effect",
+    "POST_OE_04": "Awareness of disengagement detection",
+    "POST_OE_05": "Re-engagement cues",
+    "POST_OE_06": "Context-aware task guidance",
+    "POST_OE_07": "Comparison to a human study partner",
+    "POST_OE_08": "Task initiation and persistence",
+    "POST_OE_09": "Suggested changes",
+    "POST_OE_10": "Unhelpful or distracting moments",
+    "POST_OE_11": "Interest in future use",
+    "POST_OE_12": "Recommendation to others",
+}
+
 # Participants to INCLUDE (whitelist). Compared after PID normalisation
 # (leading zeros stripped, so "0001" == "1"). Empty set = include everyone.
 INCLUDE_PIDS: set[str] = {"11", "12", "13", "14", "15", "16", "17"}
@@ -372,6 +389,7 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \pgfplotsset{compat=1.17}
 \usepackage{booktabs}
 \usepackage{longtable}
+\usepackage{pdflscape}
 \usepackage{xcolor}
 \definecolor{ApxADHD}{RGB}{68,119,170}    % Tol blue
 \definecolor{ApxControl}{RGB}{204,102,17} % Tol orange (darker, prints well)
@@ -669,7 +687,14 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
 
 
 def open_ended_tables(df, qtext, groups, cols, title):
-    parts = [f"\\subsection*{{{esc(title)}}}\n"]
+    """Open-ended sections render in LANDSCAPE (pdflscape): the two-column
+    verbatim-answer tables use the page's long edge, which long prose needs.
+    Inside the landscape environment \\textwidth is the landscape width, so
+    the 0.47\\textwidth columns stretch automatically. Each question gets a
+    short bold subheader from OE_HEADERS (skipped if it would just repeat
+    the section title), with the full question text below it."""
+    parts = ["\\begin{landscape}\n" f"\\subsection*{{{esc(title)}}}\n"]
+    wrote_any = False
     for col in cols:
         if col not in df.columns:
             continue
@@ -681,7 +706,14 @@ def open_ended_tables(df, qtext, groups, cols, title):
                 answers[g].append((row["PID"], v.strip()))
         if not (answers[GROUP_ADHD] or answers[GROUP_CONTROL]):
             continue
+        header = OE_HEADERS.get(col)
+        if header and header.lower() != title.lower():
+            parts.append(f"\\subsubsection*{{{esc(header)}}}\n")
         parts.append(text_answers_table(answers, qtext.get(col, col)))
+        wrote_any = True
+    if not wrote_any:
+        return ""
+    parts.append("\\end{landscape}\n")
     return "\n".join(parts)
 
 
