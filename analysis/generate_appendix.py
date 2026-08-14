@@ -26,6 +26,8 @@ from __future__ import annotations
 import glob
 import os
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime
 
@@ -61,6 +63,14 @@ FILE_PATTERNS = {
 # makes pages overflow, lower the row count or the height.
 LIKERT_ROWS_PER_PAGE = 8
 LIKERT_CHART_HEIGHT = "2.2cm"
+
+# Run with --sync to also copy the three fragments into the thesis repo's
+# apx-subfiles/ folder, commit, and push (then in Overleaf: Menu -> GitHub ->
+# "Pull GitHub changes"). The thesis repo is PRIVATE and must stay private —
+# the fragments contain verbatim participant answers.
+THESIS_APX_DIR = os.path.expanduser(
+    "~/Projects/MSc-Project-Final-Report/apx-subfiles")
+SYNC_FILES = ["apx_pre_study.tex", "apx_post_control.tex", "apx_post_robot.tex"]
 
 # Short subheaders for the open-ended questions (the full question text is
 # still printed above each answer table). Keys are CSV column names.
@@ -911,6 +921,40 @@ def main():
         print(f"  wrote {fname} ({len(content) // 1024} KB)")
     print("Done. \\input{} the fragments from your Appendix subfile "
           "(after adding the preamble snippet to Main.tex once).")
+
+    if "--sync" in sys.argv:
+        sync_to_thesis_repo()
+
+
+def sync_to_thesis_repo():
+    """Copy the three appendix fragments into the thesis repo and push, so
+    Overleaf picks them up via Menu -> GitHub -> 'Pull GitHub changes'.
+    The thesis repo is PRIVATE and must stay private: the fragments contain
+    verbatim participant answers."""
+    if not os.path.isdir(THESIS_APX_DIR):
+        print(f"--sync: {THESIS_APX_DIR} not found — clone the thesis repo "
+              "there first; skipping.")
+        return
+    repo = os.path.dirname(THESIS_APX_DIR)
+    for fname in SYNC_FILES:
+        shutil.copy2(os.path.join(OUTPUT_DIR, fname),
+                     os.path.join(THESIS_APX_DIR, fname))
+    changed = subprocess.run(
+        ["git", "status", "--porcelain", "--", os.path.basename(THESIS_APX_DIR)],
+        cwd=repo, capture_output=True, text=True).stdout.strip()
+    if not changed:
+        print("--sync: fragments unchanged — nothing to push.")
+        return
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    subprocess.run(["git", "add", os.path.basename(THESIS_APX_DIR)],
+                   cwd=repo, check=True)
+    subprocess.run(
+        ["git", "commit", "-m",
+         f"chore(appendix): regenerate questionnaire fragments ({stamp})\n\n"],
+        cwd=repo, check=True)
+    subprocess.run(["git", "push"], cwd=repo, check=True)
+    print("--sync: pushed to thesis repo — in Overleaf: Menu -> GitHub -> "
+          "Pull GitHub changes.")
 
 
 if __name__ == "__main__":
