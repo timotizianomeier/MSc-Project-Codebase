@@ -400,7 +400,6 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{pdflscape}
-\usepackage{paracol}
 \usepackage{xcolor}
 \definecolor{ApxADHD}{RGB}{68,119,170}    % Tol blue
 \definecolor{ApxControl}{RGB}{204,102,17} % Tol orange (darker, prints well)
@@ -620,31 +619,33 @@ def category_table(df, col, groups, cats) -> str:
 
 def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
                        title: str, header: str | None = None) -> str:
-    """Two INDEPENDENT columns (paracol), ADHD left / Control right. Unlike
-    a table, each column flows on its own: answers stack with a uniform gap
-    per column, so a 3-line answer on one side never forces blank space
-    into the other. paracol keeps the two columns page-synced and breaks
-    across pages like normal text."""
-    def column(items):
-        if not items:
-            return "\\textit{--}"
-        return "\n\\par\\vspace{0.9em}\n".join(
-            f"\\textbf{{P{esc(pid)}:}} {esc(ans)}" for pid, ans in items)
-
+    """Two-column longtable, ADHD | Control, one answer per row with PID.
+    Column widths use \\linewidth so the table stretches on landscape pages
+    (pdflscape updates \\linewidth, not \\textwidth). Rows are paired, so a
+    long answer on one side leaves matching blank space on the other —
+    accepted trade-off after paracol proved fragile (removed 17.08)."""
     a = answers_by_group.get(GROUP_ADHD, [])
     c = answers_by_group.get(GROUP_CONTROL, [])
+    n = max(len(a), len(c))
+    rows = []
+    for i in range(n):
+        left = f"\\textbf{{P{esc(a[i][0])}:}} {esc(a[i][1])}" if i < len(a) else ""
+        right = f"\\textbf{{P{esc(c[i][0])}:}} {esc(c[i][1])}" if i < len(c) else ""
+        rows.append(f"{left} & {right} \\\\[6pt]")
+    body = "\n".join(rows)
     # Inline heading: bold short header; italic question on the SAME line.
     head = (f"\\textbf{{{esc(header)}}}; \\textit{{{esc(title)}}}" if header
             else f"\\textit{{{esc(title)}}}")
-    return f"""\\noindent{head}\\par\\nopagebreak\\vspace{{0.4em}}
+    return f"""\\noindent{head}\\par\\nopagebreak\\vspace{{0.3em}}
 {{\\small
-\\begin{{paracol}}{{2}}
-\\textbf{{ADHD}}\\par\\nopagebreak\\vspace{{0.5em}}
-{column(a)}
-\\switchcolumn
-\\textbf{{Control}}\\par\\nopagebreak\\vspace{{0.5em}}
-{column(c)}
-\\end{{paracol}}}}
+\\begin{{longtable}}{{p{{0.47\\linewidth}} p{{0.47\\linewidth}}}}
+\\toprule
+\\textbf{{ADHD}} & \\textbf{{Control}} \\\\
+\\midrule
+\\endhead
+{body}
+\\bottomrule
+\\end{{longtable}}}}
 \\vspace{{0.3em}}
 """
 
@@ -786,11 +787,7 @@ def open_ended_tables(df, qtext, groups, cols, title):
     their columns with \\linewidth to stretch automatically. Each question gets a
     short bold subheader from OE_HEADERS (skipped if it would just repeat
     the section title), with the full question text below it."""
-    # pdflscape only updates \linewidth on landscape pages; paracol computes
-    # its column widths from \textwidth, so align the two INSIDE the
-    # environment (group-scoped — portrait pages are unaffected).
     parts = ["\\begin{landscape}\n"
-             "\\setlength{\\textwidth}{\\linewidth}\n"
              f"\\subsection*{{{esc(title)}}}\n"]
     wrote_any = False
     for col in cols:
