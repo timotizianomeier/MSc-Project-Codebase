@@ -455,13 +455,13 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
     if single_series:
         for l, av in zip(labels, a):
             if av > 0:
-                nodes.append(f"\\node[font=\\scriptsize, above] at (axis cs:{{{l}}},{av}) {{\\textbf{{{av}}}}};")
+                nodes.append(f"\\node[font=\\footnotesize, above] at (axis cs:{{{l}}},{av}) {{\\textbf{{{av}}}}};")
     else:
         for l, av, cv in zip(labels, a, c):
             if av > 0:
-                nodes.append(f"\\node[font=\\tiny, above, xshift=-5pt] at (axis cs:{{{l}}},{av}) {{{av}}};")
+                nodes.append(f"\\node[font=\\scriptsize, above, xshift=-5pt] at (axis cs:{{{l}}},{av}) {{{av}}};")
             if cv > 0:
-                nodes.append(f"\\node[font=\\tiny, above, xshift=5pt] at (axis cs:{{{l}}},{cv}) {{{cv}}};")
+                nodes.append(f"\\node[font=\\scriptsize, above, xshift=5pt] at (axis cs:{{{l}}},{cv}) {{{cv}}};")
     nodes_tex = "\n    ".join(nodes)
 
     if single_series:
@@ -476,7 +476,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
                  f"    \\addplot[ybar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] "
                  f"coordinates {{{coords_c}}};{legend_cmd}")
 
-    return f"""\\begin{{tikzpicture}}
+    return f"""\\begin{{tikzpicture}}[trim axis left, trim axis right]
   \\begin{{axis}}[
     {bar_opts}, scale only axis, width={width}, height={height},
     symbolic x coords={{{sym}}}, xtick=data,
@@ -516,13 +516,13 @@ def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
     nodes = []
     for (_, x), av, cv in zip(bins, a, c):
         if av > 0:
-            nodes.append(f"\\node[font=\\tiny, above, xshift=-5pt] at (axis cs:{x},{av}) {{{av}}};")
+            nodes.append(f"\\node[font=\\scriptsize, above, xshift=-5pt] at (axis cs:{x},{av}) {{{av}}};")
         if cv > 0:
-            nodes.append(f"\\node[font=\\tiny, above, xshift=5pt] at (axis cs:{x},{cv}) {{{cv}}};")
+            nodes.append(f"\\node[font=\\scriptsize, above, xshift=5pt] at (axis cs:{x},{cv}) {{{cv}}};")
     nodes_tex = "\n    ".join(nodes)
     legend_cmd = "\n    \\legend{ADHD, Control}" if show_legend else ""
 
-    return f"""\\begin{{tikzpicture}}
+    return f"""\\begin{{tikzpicture}}[trim axis left, trim axis right]
   \\begin{{axis}}[
     ybar=2pt, bar width=8pt, scale only axis, width={width}, height={height},
     xmin=-2, xmax=102, xtick={{0,10,...,100}},
