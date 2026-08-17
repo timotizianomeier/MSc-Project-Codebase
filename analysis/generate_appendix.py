@@ -415,10 +415,20 @@ def header_comment(sources: list[str]) -> str:
             f"% Do not edit by hand — rerun the script instead.\n\n")
 
 
+def _ymax(peak: int, ceiling: int | None = None) -> float:
+    """Axis top for a histogram. `ceiling` = tallest bar across the whole
+    instrument (NARS, SUS, ...) so every chart WITHIN one instrument shares
+    the same y-scale and bar heights are directly comparable; None -> the
+    chart autoscales to its own tallest bar."""
+    top = ceiling if ceiling else max(peak, 1)
+    return top * 1.3 + 0.3  # headroom for the count labels above the bars
+
+
 def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
                   width: str = "0.55\\textwidth", height: str = "3.4cm",
                   rotate_labels: bool = True, single_series: bool = False,
-                  label_mode: str = "default", show_legend: bool = True) -> str:
+                  label_mode: str = "default", show_legend: bool = True,
+                  y_ceiling: int | None = None) -> str:
     """One pgfplots ybar chart: x = answer categories, ADHD and Control as
     side-by-side (grouped) bars with the count above each nonzero bar.
     `cats` is [(value, display_label), ...].
@@ -432,7 +442,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
     a = [int(counts_by_group.get(GROUP_ADHD, {}).get(v, 0)) for v, _ in cats]
     c = [int(counts_by_group.get(GROUP_CONTROL, {}).get(v, 0)) for v, _ in cats]
     peak = max(a + c) if single_series is False else max(a, default=0)
-    ymax = max(peak, 1) * 1.35 + 0.5
+    ymax = _ymax(peak, y_ceiling)
 
     coords_a = " ".join(f"({{{l}}},{v})" for l, v in zip(labels, a))
     coords_c = " ".join(f"({{{l}}},{v})" for l, v in zip(labels, c))
@@ -484,7 +494,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
     ymin=0, ymax={ymax:.1f}, ytick=\\empty, axis y line=none,
     axis x line*=bottom,
     enlarge x limits={{abs=0.6cm}},
-    legend style={{font=\\tiny, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
+    legend style={{font=\\scriptsize, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
     legend columns=2,
     legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
   ]
@@ -495,7 +505,8 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
 
 
 def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
-                 label_mode: str, show_legend: bool) -> str:
+                 label_mode: str, show_legend: bool,
+                 y_ceiling: int | None = None) -> str:
     """TLX histogram on a true NUMERIC 0-100 axis: grouped bars at the bin
     centres (5, 15, ..., 95), ticks at the bin edges 0,10,...,100 — so the
     100 label exists and the plain number labels hug the axis (no wrapped
@@ -504,7 +515,7 @@ def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
            [("90--100", 95)]
     a = [int(counts_by_group.get(GROUP_ADHD, {}).get(k, 0)) for k, _ in bins]
     c = [int(counts_by_group.get(GROUP_CONTROL, {}).get(k, 0)) for k, _ in bins]
-    ymax = max(max(a + c), 1) * 1.35 + 0.5
+    ymax = _ymax(max(a + c), y_ceiling)
     coords_a = " ".join(f"({x},{v})" for (_, x), v in zip(bins, a))
     coords_c = " ".join(f"({x},{v})" for (_, x), v in zip(bins, c))
 
@@ -529,7 +540,7 @@ def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
     {xtick_style}
     ymin=0, ymax={ymax:.1f}, ytick=\\empty, axis y line=none,
     axis x line*=bottom,
-    legend style={{font=\\tiny, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
+    legend style={{font=\\scriptsize, at={{(1,1.04)}}, anchor=south east, draw=none, fill=none}},
     legend columns=2,
     legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
   ]
@@ -693,17 +704,54 @@ def bin_slider(df: pd.DataFrame, col: str) -> pd.DataFrame:
 # Instrument-level builders
 # ============================================================================
 
-def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
-                      with_stats=False):
-    """A block of question rows (text + stacked chart), optionally followed by
-    per-question summary-statistics tables (ranks 1..k).
+class Paginator:
+    """Tracks the vertical slot position on the current page so consecutive
+    chart instruments FLOW into one another (no forced page break between
+    them) while the answer-scale labels still land where they are needed:
+    below the last chart on every page AND below the last chart of every
+    instrument (scales differ between instruments). Page breaks are emitted
+    explicitly every LIKERT_ROWS_PER_PAGE slots; an instrument heading
+    consumes one slot (conservative — keeps pages from overflowing)."""
 
-    Pagination is explicit so answer-scale labels appear exactly once per
-    page: the instrument starts on a fresh page, rows are batched
-    LIKERT_ROWS_PER_PAGE per page with \\newpage between batches, and only
-    the LAST chart of each page carries the (bold, wrapped) labels below
-    it; the legend sits on the first chart of each page."""
-    parts = [f"\\newpage\n\\subsection*{{{esc(title)}}}\n"]
+    def __init__(self, rows_per_page: int = LIKERT_ROWS_PER_PAGE):
+        self.rows = rows_per_page
+        self.pos = 0  # slots used on the current page
+
+    def heading(self) -> str:
+        """Prefix to emit before an instrument heading: a page break if
+        the heading would be orphaned at the very bottom of the page."""
+        if self.pos >= self.rows - 1:
+            self.pos = 0
+            return "\\newpage\n"
+        self.pos += 1
+        return ""
+
+    def row(self, first_in_instrument: bool, last_in_instrument: bool):
+        """Returns (prefix, footer_labels, show_legend) for the next chart."""
+        prefix = ""
+        if self.pos >= self.rows:
+            prefix = "\\newpage\n"
+            self.pos = 0
+        first_on_page = (self.pos == 0)
+        self.pos += 1
+        last_on_page = (self.pos == self.rows)
+        return (prefix,
+                last_on_page or last_in_instrument,
+                first_on_page or first_in_instrument)
+
+    def force_break(self):
+        """Call after non-chart material (e.g. stats tables) so the next
+        chart starts on a fresh page with a known slot position."""
+        self.pos = self.rows
+
+
+def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
+                      with_stats=False, pag: Paginator | None = None):
+    """A block of question rows (text + grouped chart), optionally followed
+    by per-question summary-statistics tables (ranks 1..k). Pagination and
+    label placement are delegated to `pag` (see Paginator)."""
+    pag = pag or Paginator()
+    parts = [pag.heading() + f"\\subsection*{{{esc(title)}}}\n"]
     stats_parts = []
     items = []
     for i in range(1, n_items + 1):
@@ -712,18 +760,19 @@ def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
             print(f"  WARNING: column {col} missing — skipped.")
             continue
         items.append((i, col))
-    for pos, (i, col) in enumerate(items):
-        row_in_page = pos % LIKERT_ROWS_PER_PAGE
-        if pos and row_in_page == 0:
-            parts.append("\\newpage\n")
-        last_on_page = (row_in_page == LIKERT_ROWS_PER_PAGE - 1
-                        or pos == len(items) - 1)
-        cats = category_order(observed_values(df, col), hint)
-        counts = counts_for(df, col, groups)
+    # One y-scale for the whole instrument: tallest bar over all its charts.
+    per_item = [(i, col, category_order(observed_values(df, col), hint),
+                 counts_for(df, col, groups)) for i, col in items]
+    ceiling = max((n for _, _, _, cnt in per_item
+                   for grp in cnt.values() for n in grp.values()), default=1)
+    for pos, (i, col, cats, counts) in enumerate(per_item):
+        pre, footer, legend = pag.row(pos == 0, pos == len(per_item) - 1)
+        if pre:
+            parts.append(pre)
         chart = stacked_chart(
             counts, cats, width="\\linewidth", height=LIKERT_CHART_HEIGHT,
-            label_mode="footer" if last_on_page else "none",
-            show_legend=(row_in_page == 0))
+            label_mode="footer" if footer else "none", show_legend=legend,
+            y_ceiling=ceiling)
         parts.append(question_block(f"Q{i}", strip_stem(qtext.get(col, col)), chart))
         if with_stats:
             vals = {}
@@ -739,32 +788,34 @@ def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
     if stats_parts:
         parts.append("\\subsubsection*{Summary statistics}\n")
         parts.extend(stats_parts)
+        pag.force_break()
     return "\n".join(parts)
 
 
-def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
-    """TLX-style 0-100 sliders: binned grouped histogram per dimension.
-    Same page discipline as the likert instruments: fresh page, full-width
-    charts, axis labels (bin lower edges, steps of ten) only below the last
-    chart of each page, legend on the first."""
-    parts = [f"\\newpage\n\\subsection*{{{esc(title)}}}\n"]
+def slider_instrument(df, qtext, groups, cols, title, with_stats=False,
+                      pag: Paginator | None = None):
+    """TLX-style 0-100 sliders: binned grouped histogram per dimension, with
+    the same Paginator-driven flow and label placement as the likert
+    instruments (labels = bin edges 0..100 in steps of ten)."""
+    pag = pag or Paginator()
+    parts = [pag.heading() + f"\\subsection*{{{esc(title)}}}\n"]
     stats_parts = []
     present = [c for c in cols if c in df.columns]
     for c in cols:
         if c not in present:
             print(f"  WARNING: column {c} missing — skipped.")
-    for pos, col in enumerate(present):
-        row_in_page = pos % LIKERT_ROWS_PER_PAGE
-        if pos and row_in_page == 0:
-            parts.append("\\newpage\n")
-        last_on_page = (row_in_page == LIKERT_ROWS_PER_PAGE - 1
-                        or pos == len(present) - 1)
-        dfb = bin_slider(df, col)
-        counts = counts_for(dfb, col + "_BIN", groups)
+    per_col = [(col, counts_for(bin_slider(df, col), col + "_BIN", groups))
+               for col in present]
+    ceiling = max((n for _, cnt in per_col
+                   for grp in cnt.values() for n in grp.values()), default=1)
+    for pos, (col, counts) in enumerate(per_col):
+        pre, footer, legend = pag.row(pos == 0, pos == len(per_col) - 1)
+        if pre:
+            parts.append(pre)
         chart = slider_chart(
             counts, width="\\linewidth", height=LIKERT_CHART_HEIGHT,
-            label_mode="footer" if last_on_page else "none",
-            show_legend=(row_in_page == 0))
+            label_mode="footer" if footer else "none", show_legend=legend,
+            y_ceiling=ceiling)
         dim = qtext.get(col, col).split(" - ")[0]
         parts.append(question_block(dim, "", chart))
         if with_stats:
@@ -776,6 +827,7 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False):
     if stats_parts:
         parts.append("\\subsubsection*{Summary statistics}\n")
         parts.extend(stats_parts)
+        pag.force_break()
     return "\n".join(parts)
 
 
@@ -819,6 +871,7 @@ def open_ended_tables(df, qtext, groups, cols, title):
 
 def build_pre_study(pre, qtext, groups, src):
     out = [header_comment([src])]
+    pag = Paginator()
     n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
     n_c = len(groups) - n_a
     method = {
@@ -877,49 +930,53 @@ def build_pre_study(pre, qtext, groups, src):
         cats = category_order(observed_values(pre, col), "YESNO")
         out.append(category_table(pre, col, groups, cats))
 
+    # Demographics above fill part of the page -> chart instruments start fresh.
+    out.append("\\newpage\n")
     out.append(likert_instrument(pre, qtext, groups, "PRE_NARS_", 14,
                                  "NARS — Negative Attitudes towards Robots Scale",
-                                 hint="LIKERT5"))
+                                 hint="LIKERT5", pag=pag))
     out.append(likert_instrument(pre, qtext, groups, "PRE_ASRS_", 18,
                                  "ASRS v1.1 — Adult ADHD Self-Report Scale",
-                                 hint="ASRS"))
+                                 hint="ASRS", pag=pag))
     out.append(likert_instrument(pre, qtext, groups, "PRE_ESQR_", 25,
                                  "ESQ-R — Executive Skills Questionnaire (Revised)",
-                                 hint="ESQR"))
+                                 hint="ESQR", pag=pag))
     return "\n".join(out)
 
 
 def build_post_control(ctrl, qtext, groups, src):
     out = [header_comment([src])]
+    pag = Paginator()
     out.append(open_ended_tables(ctrl, qtext, groups, ["POST_OE_01"],
                                  "Task description"))
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
     out.append(slider_instrument(ctrl, qtext, groups, tlx_cols,
-                                 "NASA-TLX (control session)"))
+                                 "NASA-TLX (control session)", pag=pag))
     return "\n".join(out)
 
 
 def build_post_robot(post, qtext, groups, src):
     out = [header_comment([src])]
+    pag = Paginator()
     out.append(likert_instrument(post, qtext, groups, "POST_NARS_", 14,
                                  "NARS — Negative Attitudes towards Robots Scale",
-                                 hint="LIKERT5"))
+                                 hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_SUS_", 10,
-                                 "SUS — System Usability Scale", hint="LIKERT5"))
+                                 "SUS — System Usability Scale", hint="LIKERT5", pag=pag))
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
     out.append(slider_instrument(post, qtext, groups, tlx_cols,
-                                 "NASA-TLX (robot session)"))
+                                 "NASA-TLX (robot session)", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
-                                 "Body doubling / presence", hint="LIKERT5"))
+                                 "Body doubling / presence", hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_INATT_", 5,
-                                 "Inattention detection", hint="LIKERT5"))
+                                 "Inattention detection", hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_CONTEXT_", 4,
                                  "Context-aware / task-aware support",
-                                 hint="LIKERT5"))
+                                 hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_OVERALL_", 3,
-                                 "Overall experience", hint="LIKERT5"))
+                                 "Overall experience", hint="LIKERT5", pag=pag))
     oe_cols = [f"POST_OE_{i:02d}" for i in range(1, 13)]
     out.append(open_ended_tables(post, qtext, groups, oe_cols,
                                  "Open-ended questions"))
