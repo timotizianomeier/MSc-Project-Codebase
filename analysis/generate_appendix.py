@@ -89,6 +89,21 @@ OE_HEADERS = {
     "POST_OE_12": "Recommendation to others",
 }
 
+# DISPLAY-ONLY renumbering: study PIDs started at 11, but the thesis shows
+# P1, P2, ... Applied ONLY when a PID is rendered into the LaTeX output —
+# filenames, raw CSVs, INCLUDE_PIDS, groups files etc. all keep true PIDs
+# (the authoritative mapping lives in Participant_Linking_File.xlsx on Box;
+# keep the two in sync). Default: subtract 10 (P11->P1 ... P27->P17). Edit
+# individual entries here if the thesis needs different labels (e.g. to
+# close the gap left by P26 until their rescheduled session happens).
+PID_DISPLAY = {str(n): str(n - 10) for n in range(11, 40)}
+
+
+def disp_pid(pid) -> str:
+    """Display label for a participant id (falls back to the true PID)."""
+    return PID_DISPLAY.get(str(pid), str(pid))
+
+
 # Participants to INCLUDE (whitelist). Compared after PID normalisation
 # (leading zeros stripped, so "0001" == "1"). Empty set = include everyone.
 INCLUDE_PIDS: set[str] = {"11", "12", "13", "14", "15", "16", "17"}
@@ -640,8 +655,8 @@ def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
     n = max(len(a), len(c))
     rows = []
     for i in range(n):
-        left = f"\\textbf{{P{esc(a[i][0])}:}} {esc(a[i][1])}" if i < len(a) else ""
-        right = f"\\textbf{{P{esc(c[i][0])}:}} {esc(c[i][1])}" if i < len(c) else ""
+        left = f"\\textbf{{P{esc(disp_pid(a[i][0]))}:}} {esc(a[i][1])}" if i < len(a) else ""
+        right = f"\\textbf{{P{esc(disp_pid(c[i][0]))}:}} {esc(c[i][1])}" if i < len(c) else ""
         rows.append(f"{left} & {right} \\\\[6pt]")
     body = "\n".join(rows)
     # Inline heading: bold short header; italic question on the SAME line.
