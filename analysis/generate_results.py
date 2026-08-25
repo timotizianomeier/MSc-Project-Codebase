@@ -41,8 +41,12 @@ from generate_appendix import (
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "output", "results-charts")
-THESIS_CHARTS_DIR = os.path.expanduser(
-    "~/Projects/MSc-Project-Final-Report/results-charts")
+# --sync pushes the fragments into each of these repos (all PRIVATE — the
+# charts render participant-derived data). Same \input contract everywhere.
+SYNC_TARGETS = [
+    os.path.expanduser("~/Projects/MSc-Project-Final-Report/results-charts"),
+    os.path.expanduser("~/Projects/HRI-submission-Timo/results-charts"),
+]
 
 ADHD_COLOR = "ApxADHD"        # colors already defined in the thesis preamble
 CTRL_COLOR = "ApxControl"
@@ -87,28 +91,11 @@ SHORT_LABELS = {
 # Chart builders — each returns (filename_stem, tex_fragment)
 # ============================================================================
 
-def chart_feature_means(post, qtext, groups) -> tuple[str, str]:
-    """Full-width horizontal grouped bar chart: per feature question, the
-    mean Likert score (coded 1-5) for the ADHD and Control groups side by
-    side. Questions on the y axis, scale on the x axis with the response
-    labels bracketed under the numeric ticks (after Lalwani et al. Fig. 3,
-    restyled to match the appendix charts)."""
-    # Row list mixes bold section-header rows (no bars, no value labels)
-    # with question rows. PERFORMANCE: symbolic coordinates are short keys
-    # (r1, r2, ...) — the visible text arrives via the yticklabels list
-    # instead. pgfplots string-compares coordinate names constantly (per
-    # coordinate, per tick, per node), and 100+-char sentence-length names
-    # made a single chart dominate the whole thesis compile.
-    # No header rows: each block instead gets a rotated title + vertical
-    # rule spanning its question rows, drawn left of the label column
-    # (coordinates captured inside the axis, drawn after it).
-    all_keys: list[str] = []      # short symbolic coords in display order
-    all_texts: list[str] = []     # what each row displays
-    data_rows: list[tuple[str, float, float]] = []  # (key, adhd, ctrl)
-    block_spans: list[tuple[str, str, str]] = []    # (title, first, last key)
+def _feature_data(post, qtext, groups):
+    """Shared data pass for the feature charts: rows, means, block spans."""
+    all_keys, all_texts, data_rows, block_spans = [], [], [], []
     for title, prefix, n_items in FEATURE_BLOCKS:
-        first_key = None
-        last_key = None
+        first_key = last_key = None
         for i in range(1, n_items + 1):
             col = f"{prefix}{i}"
             if col not in post.columns:
@@ -129,61 +116,75 @@ def chart_feature_means(post, qtext, groups) -> tuple[str, str]:
             last_key = key
         if first_key:
             block_spans.append((title, first_key, last_key))
+    return all_keys, all_texts, data_rows, block_spans
 
-    # Named coordinates at each block's first/last row (x=0 = axis left
-    # edge); the bracket is drawn after \end{axis}, offset past the
-    # 0.42\textwidth label column, extended half a row beyond both ends.
-    span_coords = "\n    ".join(
-        f"\\coordinate (b{i}t) at (axis cs:0,{first});"
-        f" \\coordinate (b{i}b) at (axis cs:0,{last});"
-        for i, (_, first, last) in enumerate(block_spans))
-    # Titles break at spaces onto stacked lines so they stay within their
-    # bracket's span when rotated.
-    span_draws = "\n  ".join(
-        f"\\draw ([xshift=-\\dimexpr0.42\\textwidth+8pt\\relax, yshift=0.3cm]b{i}t)"
-        f" -- ([xshift=-\\dimexpr0.42\\textwidth+8pt\\relax, yshift=-0.3cm]b{i}b)"
-        f" node[midway, rotate=90, anchor=south, align=center,"
-        f" font=\\small\\bfseries]"
-        f" {{{esc(title).replace(' ', chr(92) * 2)}}};"
-        for i, (title, _, _) in enumerate(block_spans))
 
+def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
+                          label_font, title_font, tick_anchors, value_labels,
+                          value_font="\\scriptsize", xmax=5.6,
+                          span_ext="0.3cm", value_extra_pt=0.0):
+    """Render the grouped-bar feature chart at a given size. See
+    chart_feature_means / chart_feature_means_col for the two variants."""
+    all_keys, all_texts, data_rows, block_spans = data
     sym = ",".join(all_keys)
     yticklabels = ",".join("{" + t + "}" for t in all_texts)
     coords_a = " ".join(f"({a:.2f},{k})" for k, a, c in data_rows)
     coords_c = " ".join(f"({c:.2f},{k})" for k, a, c in data_rows)
+    off = bar_pt / 2
 
     # nodes near coords ignores the bar shift on a reversed symbolic xbar
-    # axis, so place value labels manually at each bar's own vertical offset
-    # (bar width 5.5pt -> the pair sits at +-2.75pt; ADHD is the lower bar).
-    # Plot order: Control first = lower bar, so ADHD sits ON TOP of each
-    # pair; `reverse legend` keeps the legend reading ADHD, Control.
-    value_nodes = "\n    ".join(
-        f"\\node[font=\\scriptsize, anchor=west, xshift=2pt, yshift=2.75pt] "
-        f"at (axis cs:{a:.2f},{k}) {{{a:.2f}}}; "
-        f"\\node[font=\\scriptsize, anchor=west, xshift=2pt, yshift=-2.75pt] "
-        f"at (axis cs:{c:.2f},{k}) {{{c:.2f}}};"
-        for k, a, c in data_rows)
+    # axis -> explicit value nodes at each bar's own offset (ADHD on top:
+    # Control plots first / lower).
+    value_nodes = ""
+    if value_labels:
+        # value_extra_pt pushes the labels slightly beyond the bar centres —
+        # needed in the compact variant where half a bar width is less than
+        # the label text's half-height.
+        v_off = off + value_extra_pt
+        value_nodes = "\n    ".join(
+            f"\\node[font={value_font}, inner sep=1pt, anchor=west,"
+            f" xshift=2pt, yshift={v_off:.2f}pt] "
+            f"at (axis cs:{a:.2f},{k}) {{{a:.2f}}}; "
+            f"\\node[font={value_font}, inner sep=1pt, anchor=west,"
+            f" xshift=2pt, yshift=-{v_off:.2f}pt] "
+            f"at (axis cs:{c:.2f},{k}) {{{c:.2f}}};"
+            for k, a, c in data_rows)
 
-    xticklabels = ",".join(
-        f"{{{v}\\\\{{\\scriptsize ({lbl})}}}}" if lbl else f"{{{v}}}"
-        for v, lbl in LIKERT_TICKS)
+    if tick_anchors:
+        xticklabels = ",".join(
+            f"{{{v}\\\\{{\\scriptsize ({lbl})}}}}" if lbl else f"{{{v}}}"
+            for v, lbl in LIKERT_TICKS)
+        xtick_line = f"xticklabels={{{xticklabels}}},\n    x tick label style={{font={label_font}, align=center}},"
+    else:
+        xtick_line = f"x tick label style={{font={label_font}}},"
 
-    # NO trim axis here (unlike the appendix charts): trim excludes the y
-    # labels from the bounding box, so \\centering centers only the bars and
-    # the figure appears shoved left. A standalone figure wants the full box.
-    return "feature_means", f"""\\begin{{tikzpicture}}
+    span_coords = "\n    ".join(
+        f"\\coordinate (b{i}t) at (axis cs:0,{first});"
+        f" \\coordinate (b{i}b) at (axis cs:0,{last});"
+        for i, (_, first, last) in enumerate(block_spans))
+    bracket_x = f"-\\dimexpr{label_w}+8pt\\relax"
+    span_draws = "\n  ".join(
+        f"\\draw ([xshift={bracket_x}, yshift={span_ext}]b{i}t)"
+        f" -- ([xshift={bracket_x}, yshift=-{span_ext}]b{i}b)"
+        f" node[midway, rotate=90, anchor=south, align=center,"
+        f" font={title_font}]"
+        f" {{{esc(title).replace(' ', chr(92) * 2)}}};"
+        for i, (title, _, _) in enumerate(block_spans))
+
+    # NO trim axis (see thesis variant note): the full bounding box must
+    # include labels so \centering centers the ensemble.
+    return f"""\\begin{{tikzpicture}}
   \\begin{{axis}}[
-    xbar, bar width=5.5pt, y=0.75cm,
-    scale only axis, width=0.48\\textwidth,
+    xbar, bar width={bar_pt}pt, y={pitch},
+    scale only axis, width={axis_w},
     symbolic y coords={{{sym}}}, ytick={{{sym}}}, y dir=reverse,
     yticklabels={{{yticklabels}}},
-    yticklabel style={{font=\\small, align=right, text width=0.42\\textwidth}},
-    xmin=0, xmax=5.6,
+    yticklabel style={{font={label_font}, align=right, text width={label_w}}},
+    xmin=0, xmax={xmax},
     xtick={{1,2,3,4,5}},
-    xticklabels={{{xticklabels}}},
-    x tick label style={{font=\\small, align=center}},
+    {xtick_line}
     axis x line*=bottom, axis y line*=left,
-    legend style={{font=\\small, at={{(0.5,1.01)}}, anchor=south,
+    legend style={{font={label_font}, at={{(0.5,1.01)}}, anchor=south,
                    draw=none, fill=none}},
     legend columns=2,
     legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
@@ -199,7 +200,32 @@ def chart_feature_means(post, qtext, groups) -> tuple[str, str]:
 \\end{{tikzpicture}}"""
 
 
-CHART_BUILDERS = [chart_feature_means]
+def chart_feature_means(post, qtext, groups):
+    """Thesis version: fills the text width, verbal tick anchors, per-bar
+    value labels."""
+    data = _feature_data(post, qtext, groups)
+    return "feature_means", _render_feature_chart(
+        data, axis_w="0.48\\textwidth", label_w="0.42\\textwidth",
+        pitch="0.75cm", bar_pt=5.5, label_font="\\small",
+        title_font="\\small\\bfseries", tick_anchors=True,
+        value_labels=True)
+
+
+def chart_feature_means_col(post, qtext, groups):
+    """ACM column-width version (HRI): fits \columnwidth in a two-column
+    layout. Numeric ticks only (anchors in the caption); per-bar value
+    labels in \\tiny, nudged slightly past the bar centres so the pair
+    clears each other at the tight pitch."""
+    data = _feature_data(post, qtext, groups)
+    return "feature_means_col", _render_feature_chart(
+        data, axis_w="0.40\\columnwidth", label_w="0.46\\columnwidth",
+        pitch="0.48cm", bar_pt=4.0, label_font="\\scriptsize",
+        title_font="\\scriptsize\\bfseries", tick_anchors=False,
+        value_labels=True, value_font="\\tiny", value_extra_pt=1.6,
+        xmax=5.6, span_ext="0.18cm")
+
+
+CHART_BUILDERS = [chart_feature_means, chart_feature_means_col]
 
 
 # ============================================================================
@@ -236,29 +262,30 @@ def main() -> None:
     print(f"  wrote results-charts/results_preview.tex ({len(names)} charts)")
 
     if "--sync" in sys.argv:
-        sync_to_thesis_repo(names)
+        for target in SYNC_TARGETS:
+            sync_to_repo(target, names)
 
 
-def sync_to_thesis_repo(names: list[str]) -> None:
-    """Copy the chart fragments into the thesis repo and push (see
-    generate_appendix.sync_to_thesis_repo — same mechanics, same privacy
-    rule: the thesis repo must stay PRIVATE)."""
-    repo = os.path.dirname(THESIS_CHARTS_DIR)
+def sync_to_repo(charts_dir: str, names: list[str]) -> None:
+    """Copy the chart fragments into one target repo's results-charts/ and
+    push (same mechanics as generate_appendix.sync_to_thesis_repo; every
+    target repo must stay PRIVATE)."""
+    repo = os.path.dirname(charts_dir)
     if not os.path.isdir(repo):
-        print(f"--sync: {repo} not found — clone the thesis repo first; skipping.")
+        print(f"--sync: {repo} not found — clone it first; skipping.")
         return
-    os.makedirs(THESIS_CHARTS_DIR, exist_ok=True)
+    os.makedirs(charts_dir, exist_ok=True)
     for name in names + ["results_preview"]:
         shutil.copy2(os.path.join(OUTPUT_DIR, f"{name}.tex"),
-                     os.path.join(THESIS_CHARTS_DIR, f"{name}.tex"))
+                     os.path.join(charts_dir, f"{name}.tex"))
     changed = subprocess.run(
-        ["git", "status", "--porcelain", "--", os.path.basename(THESIS_CHARTS_DIR)],
+        ["git", "status", "--porcelain", "--", os.path.basename(charts_dir)],
         cwd=repo, capture_output=True, text=True).stdout.strip()
     if not changed:
-        print("--sync: charts unchanged — nothing to push.")
+        print(f"--sync: {os.path.basename(repo)}: charts unchanged — nothing to push.")
         return
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    subprocess.run(["git", "add", os.path.basename(THESIS_CHARTS_DIR)],
+    subprocess.run(["git", "add", os.path.basename(charts_dir)],
                    cwd=repo, check=True)
     subprocess.run(
         ["git", "commit", "-m",
@@ -266,8 +293,8 @@ def sync_to_thesis_repo(names: list[str]) -> None:
          "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"],
         cwd=repo, check=True)
     subprocess.run(["git", "push"], cwd=repo, check=True)
-    print("--sync: pushed to thesis repo — in Overleaf: Menu -> GitHub -> "
-          "Pull GitHub changes.")
+    print(f"--sync: pushed to {os.path.basename(repo)} — in Overleaf: "
+          "Menu -> GitHub -> Pull GitHub changes.")
 
 
 if __name__ == "__main__":
