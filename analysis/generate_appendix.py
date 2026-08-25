@@ -77,10 +77,10 @@ SYNC_FILES = ["apx_pre_study.tex", "apx_post_control.tex", "apx_post_robot.tex"]
 OE_HEADERS = {
     "POST_OE_01": "Task description",
     "POST_OE_02": "Overall experience",
-    "POST_OE_03": "Body doubling / presence effect",
+    "POST_OE_03": "Body doubling effect",
     "POST_OE_04": "Awareness of disengagement detection",
     "POST_OE_05": "Re-engagement cues",
-    "POST_OE_06": "Context-aware task guidance",
+    "POST_OE_06": "Task-aware guidance",
     "POST_OE_07": "Comparison to a human study partner",
     "POST_OE_08": "Task initiation and persistence",
     "POST_OE_09": "Suggested changes",
@@ -985,11 +985,11 @@ def build_post_robot(post, qtext, groups, src):
     out.append(slider_instrument(post, qtext, groups, tlx_cols,
                                  "NASA-TLX (robot session)", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
-                                 "Body doubling / presence", hint="LIKERT5", pag=pag))
+                                 "Body doubling", hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_INATT_", 5,
                                  "Inattention detection", hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_CONTEXT_", 4,
-                                 "Context-aware / task-aware support",
+                                 "Task-aware support",
                                  hint="LIKERT5", pag=pag))
     out.append(likert_instrument(post, qtext, groups, "POST_FEAT_OVERALL_", 3,
                                  "Overall experience", hint="LIKERT5", pag=pag))
