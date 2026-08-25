@@ -23,6 +23,7 @@ Handles both Qualtrics export modes ("Use numeric values" and
 
 from __future__ import annotations
 
+import csv
 import glob
 import os
 import re
@@ -70,7 +71,8 @@ LIKERT_CHART_HEIGHT = "2.2cm"
 # the fragments contain verbatim participant answers.
 THESIS_APX_DIR = os.path.expanduser(
     "~/Projects/MSc-Project-Final-Report/apx-subfiles")
-SYNC_FILES = ["apx_pre_study.tex", "apx_post_control.tex", "apx_post_robot.tex"]
+SYNC_FILES = ["apx_pre_study.tex", "apx_post_control.tex", "apx_post_robot.tex",
+              "apx_session_logs.tex"]
 
 # Short subheaders for the open-ended questions (the full question text is
 # still printed above each answer table). Keys are CSV column names.
@@ -419,6 +421,11 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \usepackage{xcolor}
 \definecolor{ApxADHD}{RGB}{68,119,170}    % Tol blue
 \definecolor{ApxControl}{RGB}{204,102,17} % Tol orange (darker, prints well)
+\definecolor{ApxUserSpeech}{RGB}{102,153,204}  % session timelines: user
+\definecolor{ApxRobotSpeech}{RGB}{238,153,68}  % session timelines: robot
+\definecolor{ApxSilence}{RGB}{235,235,235}     % session timelines: no speech
+\definecolor{ApxTrigEng}{RGB}{187,34,34}       % engagement trigger marks
+\definecolor{ApxTrigEmo}{RGB}{34,136,85}       % emotion trigger marks
 % ---------------------------------------------------------------
 """
 
@@ -1003,6 +1010,274 @@ def build_post_robot(post, qtext, groups, src):
 # Main
 # ============================================================================
 
+
+# ============================================================================
+# Session-log timelines (appendix section "Session log results")
+# ============================================================================
+
+SESSION_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+TIMELINE_ROW_H_CM = 0.85
+SESSION_MAX_MIN = 45.0
+_BAND_LO, _BAND_HI = 0.06, 0.94   # score band inside each participant row
+_NEG_CLASSES = ("angry", "disgust", "fear", "sad")
+
+
+def _session_csv_dir(pid: int, cond: str) -> str | None:
+    hits = sorted(glob.glob(os.path.join(SESSION_LOGS_DIR, f"P{pid}_{cond}_*_csv")))
+    return hits[-1] if hits else None
+
+
+def _read_rows(dirpath: str, name: str) -> list[dict]:
+    path = os.path.join(dirpath, name)
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        return list(csv.DictReader(f))
+
+
+def _t_min(row: dict, field: str = "t_session_s") -> float | None:
+    raw = row.get(field) or ""
+    if not raw:
+        return None
+    t = float(raw)
+    if t < 0 or t > SESSION_MAX_MIN * 60:
+        return None
+    return t / 60.0
+
+
+def _score_series(rows: list[dict], value) -> list[list[tuple[float, float]]]:
+    """(t_min, value) points split into segments at >30s gaps, so sensing
+    outages render as gaps instead of interpolated bridges. `value` maps a
+    row to a float or None."""
+    pts = []
+    for r in rows:
+        t = _t_min(r)
+        if t is None:
+            continue
+        v = value(r)
+        if v is None:
+            continue
+        pts.append((t, v))
+    segs, cur = [], []
+    for t, v in pts:
+        if cur and t - cur[-1][0] > 0.5:
+            segs.append(cur)
+            cur = []
+        cur.append((t, v))
+    if cur:
+        segs.append(cur)
+    return segs
+
+
+def _event_times(dirpath: str, kinds: set[str]) -> list[float]:
+    out = []
+    for r in _read_rows(dirpath, "events.csv"):
+        if r.get("event_type") in kinds:
+            t = _t_min(r)
+            if t is not None:
+                out.append(t)
+    return out
+
+
+def _float_or_none(row: dict, field: str) -> float | None:
+    raw = row.get(field) or ""
+    return float(raw) if raw else None
+
+
+def _neg_mass(row: dict) -> float | None:
+    if not (row.get("angry") or ""):
+        return None
+    return sum(float(row.get(c) or 0.0) for c in _NEG_CLASSES)
+
+
+def _timeline_axis(ylabels: list[str], body: str) -> str:
+    """Shared axis frame: one row per participant (first label = TOP row)."""
+    n = len(ylabels)
+    yticks = ",".join(f"{i + 0.5:.1f}" for i in range(n))
+    ylab = ",".join("{" + l + "}" for l in reversed(ylabels))  # bottom-up
+    h = TIMELINE_ROW_H_CM * n
+    return f"""\\begin{{center}}\\begin{{tikzpicture}}
+  \\begin{{axis}}[
+    width=0.86\\textwidth, height={h:.1f}cm, scale only axis,
+    xmin=0, xmax={SESSION_MAX_MIN:.0f}, ymin=0, ymax={n},
+    xtick={{0,5,...,45}}, xlabel={{Session time (minutes)}},
+    x tick label style={{font=\\small}}, xlabel style={{font=\\small}},
+    ytick={{{yticks}}}, yticklabels={{{ylab}}},
+    y tick label style={{font=\\small}}, ytick style={{draw=none}},
+    axis x line*=bottom, axis y line*=left, clip=false,
+  ]
+{body}
+  \\end{{axis}}
+\\end{{tikzpicture}}\\end{{center}}
+"""
+
+
+def _row_base(i: int, n: int) -> float:
+    """Row i (0 = first participant) drawn from the top."""
+    return float(n - 1 - i)
+
+
+def _trigger_lines(times: list[float], base: float, color: str) -> list[str]:
+    return [f"    \\draw[{color}, line width=0.7pt] "
+            f"(axis cs:{t:.2f},{base + _BAND_LO:.2f}) -- "
+            f"(axis cs:{t:.2f},{base + _BAND_HI:.2f});"
+            for t in times]
+
+
+def _score_row_body(base: float, raw_segs, avg_segs, threshold: float,
+                    trig_times: list[float], trig_color: str,
+                    annotate01: bool) -> list[str]:
+    lo, hi = base + _BAND_LO, base + _BAND_HI
+    span = _BAND_HI - _BAND_LO
+
+    def y(v: float) -> float:
+        return base + _BAND_LO + max(0.0, min(1.0, v)) * span
+
+    out = [f"    \\draw[densely dashed, gray!70, line width=0.4pt] "
+           f"(axis cs:0,{y(threshold):.3f}) -- (axis cs:45,{y(threshold):.3f});"]
+    for segs, style in ((raw_segs, "gray!55, line width=0.3pt"),
+                        (avg_segs, "black, line width=0.6pt")):
+        for seg in segs:
+            if len(seg) < 2:
+                continue
+            coords = " ".join(f"({t:.2f},{y(v):.3f})" for t, v in seg)
+            out.append(f"    \\addplot[no marks, {style}] coordinates {{{coords}}};")
+    out.extend(_trigger_lines(trig_times, base, trig_color))
+    if annotate01:
+        out.append(f"    \\node[font=\\tiny, anchor=west, gray] at (axis cs:45.2,{lo:.2f}) {{0}};")
+        out.append(f"    \\node[font=\\tiny, anchor=west, gray] at (axis cs:45.2,{hi:.2f}) {{1}};")
+    return out
+
+
+def _sessions(cond: str, groups: dict[str, str]) -> list[tuple[int, str]]:
+    """Rows ordered ADHD group first, then control, ascending PID within."""
+    ordered = sorted((int(p) for p in INCLUDE_PIDS),
+                     key=lambda n: (groups.get(str(n)) != GROUP_ADHD, n))
+    out = []
+    for pid in ordered:
+        d = _session_csv_dir(pid, cond)
+        if d:
+            out.append((pid, d))
+        else:
+            print(f"  WARNING: no {cond} session CSVs for P{pid} — row skipped.")
+    return out
+
+
+def _interaction_chart(groups: dict[str, str]) -> str:
+    sessions = _sessions("Robot", groups)
+    n = len(sessions)
+    body = []
+    for i, (pid, d) in enumerate(sessions):
+        base = _row_base(i, n)
+        lo, hi = base + _BAND_LO, base + _BAND_HI
+        body.append(f"    \\fill[ApxSilence] (axis cs:0,{lo:.2f}) "
+                    f"rectangle (axis cs:45,{hi:.2f});")
+        speech = _read_rows(d, "speech.csv")
+        # robot first, user on top (user has priority where they overlap)
+        for actor, color in (("robot", "ApxRobotSpeech"), ("user", "ApxUserSpeech")):
+            for r in speech:
+                if r.get("actor") != actor:
+                    continue
+                t0, t1 = _float_or_none(r, "t_start_s"), _float_or_none(r, "t_end_s")
+                if t0 is None or t1 is None:
+                    continue
+                t0 = max(0.0, t0) / 60.0
+                t1 = min(SESSION_MAX_MIN * 60, t1) / 60.0
+                if t1 <= t0:
+                    continue
+                body.append(f"    \\fill[{color}] (axis cs:{t0:.2f},{lo:.2f}) "
+                            f"rectangle (axis cs:{t1:.2f},{hi:.2f});")
+    labels = [f"P{disp_pid(pid)}" for pid, _ in sessions]
+    return _timeline_axis(labels, "\n".join(body))
+
+
+def _score_chart(groups: dict[str, str], cond: str, csv_name: str, raw_value,
+                 avg_value, threshold: float, trig_kinds: set[str],
+                 trig_color: str) -> str:
+    sessions = _sessions(cond, groups)
+    n = len(sessions)
+    body = []
+    for i, (pid, d) in enumerate(sessions):
+        base = _row_base(i, n)
+        rows = _read_rows(d, csv_name)
+        body.extend(_score_row_body(
+            base,
+            _score_series(rows, raw_value),
+            _score_series(rows, avg_value),
+            threshold,
+            _event_times(d, trig_kinds), trig_color,
+            annotate01=(i == 0)))
+    labels = [f"P{disp_pid(pid)}" for pid, _ in sessions]
+    return _timeline_axis(labels, "\n".join(body))
+
+
+def build_session_logs(groups: dict[str, str]) -> str:
+    """Five full-page timeline charts from the parsed session logs."""
+    out = [header_comment(["analysis/logs/P*_csv session logs"])]
+
+    def sub(title: str, note: str, chart: str, last: bool = False) -> None:
+        out.append(f"\\subsection*{{{esc(title)}}}\n"
+                   f"\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}\n"
+                   + chart + ("" if last else "\n\\newpage\n"))
+
+    order_note = ("Rows: ADHD-group participants first, then the control "
+                  "group (ascending within each).")
+    legend_int = ("Speech segments per participant over the 45-minute robot "
+                  "session: \\textcolor{ApxUserSpeech}{\\rule{2ex}{1.2ex}} user, "
+                  "\\textcolor{ApxRobotSpeech}{\\rule{2ex}{1.2ex}} robot, grey = no "
+                  "speech. " + order_note)
+    gating_note = ("A rolling value beyond the threshold does not necessarily "
+                   "trigger an intervention: the policy additionally requires "
+                   "no robot speech in progress and at least 60 seconds since "
+                   "both the last conversational exchange and the last "
+                   "intervention (cf. the intervention gates in the "
+                   "Methodology).")
+    legend_score = ("Thin grey line: per-poll value; black line: the 30-second "
+                    "rolling value used by the intervention policy; dashed "
+                    "line: the trigger threshold ({thr}); vertical "
+                    "{color} marks: {what}. Line gaps are sensing gaps. "
+                    + gating_note + " " + order_note)
+
+    sub("Interaction timelines (robot sessions)", legend_int,
+        _interaction_chart(groups))
+    sub("Engagement scores (robot sessions)",
+        legend_score.format(thr="0.80",
+                            color="\\textcolor{ApxTrigEng}{red}",
+                            what="delivered engagement interventions"),
+        _score_chart(groups, "Robot", "engagement.csv",
+                     lambda r: _float_or_none(r, "score"),
+                     lambda r: _float_or_none(r, "average"),
+                     0.80, {"intervention_engagement_sent"}, "ApxTrigEng"))
+    sub("Negative-affect scores (robot sessions)",
+        legend_score.format(thr="0.60",
+                            color="\\textcolor{ApxTrigEmo}{green}",
+                            what="delivered emotion interventions"),
+        _score_chart(groups, "Robot", "emotion.csv",
+                     _neg_mass,
+                     lambda r: _float_or_none(r, "negative_share"),
+                     0.60, {"intervention_emotion_sent"}, "ApxTrigEmo"))
+    sub("Engagement scores (control sessions)",
+        legend_score.format(thr="0.80",
+                            color="\\textcolor{ApxTrigEng}{red}",
+                            what="counterfactual engagement interventions "
+                                 "(logged, never delivered)"),
+        _score_chart(groups, "Control", "engagement.csv",
+                     lambda r: _float_or_none(r, "score"),
+                     lambda r: _float_or_none(r, "average"),
+                     0.80, {"counterfactual_engagement"}, "ApxTrigEng"))
+    sub("Negative-affect scores (control sessions)",
+        legend_score.format(thr="0.60",
+                            color="\\textcolor{ApxTrigEmo}{green}",
+                            what="counterfactual emotion interventions "
+                                 "(logged, never delivered)"),
+        _score_chart(groups, "Control", "emotion.csv",
+                     _neg_mass,
+                     lambda r: _float_or_none(r, "negative_share"),
+                     0.60, {"counterfactual_emotion"}, "ApxTrigEmo"),
+        last=True)
+    return "\n".join(out)
+
+
 def main():
     print(f"Data dir:   {DATA_DIR}")
     print(f"Output dir: {OUTPUT_DIR}")
@@ -1032,6 +1307,7 @@ def main():
         "apx_pre_study.tex": build_pre_study(pre, q_pre, groups, paths["pre"]),
         "apx_post_control.tex": build_post_control(ctrl, q_ctrl, groups, paths["control"]),
         "apx_post_robot.tex": build_post_robot(post, q_post, groups, paths["post"]),
+        "apx_session_logs.tex": build_session_logs(groups),
         "apx_preamble_snippet.tex": PREAMBLE_SNIPPET,
     }
     for fname, content in outputs.items():
