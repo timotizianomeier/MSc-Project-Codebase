@@ -1090,16 +1090,21 @@ def _neg_mass(row: dict) -> float | None:
     return sum(float(row.get(c) or 0.0) for c in _NEG_CLASSES)
 
 
-def _timeline_axis(ylabels: list[str], body: str) -> str:
-    """Shared axis frame: one row per participant (first label = TOP row)."""
-    n = len(ylabels)
-    yticks = ",".join(f"{i + 0.5:.1f}" for i in range(n))
-    ylab = ",".join("{" + l + "}" for l in reversed(ylabels))  # bottom-up
-    h = TIMELINE_ROW_H_CM * n
+def _timeline_axis(rows_labeled: list[tuple[float, str]], ymax: float,
+                   headers: list[tuple[str, float]], body: str) -> str:
+    """Shared axis frame: one row per participant plus bold group headers
+    in the label gutter."""
+    yticks = ",".join(f"{b + 0.5:.2f}" for b, _ in rows_labeled)
+    ylab = ",".join("{" + l + "}" for _, l in rows_labeled)
+    header_nodes = "\n".join(
+        f"    \\node[anchor=south east, font=\\small\\bfseries] "
+        f"at (axis cs:0,{y:.2f}) {{{lbl}}};" for lbl, y in headers)
+    body = body + "\n" + header_nodes
+    h = TIMELINE_ROW_H_CM * ymax
     return f"""\\begin{{center}}\\begin{{tikzpicture}}
   \\begin{{axis}}[
     width=0.86\\textwidth, height={h:.1f}cm, scale only axis,
-    xmin=0, xmax={SESSION_MAX_MIN:.0f}, ymin=0, ymax={n},
+    xmin=0, xmax={SESSION_MAX_MIN:.0f}, ymin=0, ymax={ymax:.2f},
     xtick={{0,5,...,45}}, xlabel={{Session time (minutes)}},
     x tick label style={{font=\\small}}, xlabel style={{font=\\small}},
     ytick={{{yticks}}}, yticklabels={{{ylab}}},
@@ -1112,9 +1117,28 @@ def _timeline_axis(ylabels: list[str], body: str) -> str:
 """
 
 
-def _row_base(i: int, n: int) -> float:
-    """Row i (0 = first participant) drawn from the top."""
-    return float(n - 1 - i)
+_GROUP_GAP = 0.7  # spacer rows between the ADHD and control blocks
+
+
+def _layout(sessions: list[tuple[int, str]], groups: dict[str, str]):
+    """Row bases (top-down) with a gap between the ADHD and control blocks,
+    plus (label, y) positions for the bold group headers that sit in the
+    label gutter above each block's first row."""
+    n_adhd = sum(1 for pid, _ in sessions
+                 if groups.get(str(pid)) == GROUP_ADHD)
+    split = 0 < n_adhd < len(sessions)
+    gap = _GROUP_GAP if split else 0.0
+    ymax = len(sessions) + gap
+    rows = []
+    for i, (pid, d) in enumerate(sessions):
+        base = ymax - (i + 1) - (gap if i >= n_adhd else 0.0)
+        rows.append((pid, d, base))
+    headers = [("ADHD", ymax + 0.05)]
+    if split:
+        # top edge of the first control row is (ymax - n_adhd - gap):
+        # base = ymax - (n_adhd+1) - gap, +1 for the row height.
+        headers.append(("Control", ymax - n_adhd - gap + 0.05))
+    return rows, ymax, headers
 
 
 def _trigger_lines(times: list[float], base: float, color: str) -> list[str]:
@@ -1165,10 +1189,9 @@ def _sessions(cond: str, groups: dict[str, str]) -> list[tuple[int, str]]:
 
 def _interaction_chart(groups: dict[str, str]) -> str:
     sessions = _sessions("Robot", groups)
-    n = len(sessions)
+    rows, ymax, headers = _layout(sessions, groups)
     body = []
-    for i, (pid, d) in enumerate(sessions):
-        base = _row_base(i, n)
+    for pid, d, base in rows:
         lo, hi = base + _BAND_LO, base + _BAND_HI
         body.append(f"    \\fill[ApxSilence] (axis cs:0,{lo:.2f}) "
                     f"rectangle (axis cs:45,{hi:.2f});")
@@ -1187,28 +1210,27 @@ def _interaction_chart(groups: dict[str, str]) -> str:
                     continue
                 body.append(f"    \\fill[{color}] (axis cs:{t0:.2f},{lo:.2f}) "
                             f"rectangle (axis cs:{t1:.2f},{hi:.2f});")
-    labels = [f"P{disp_pid(pid)}" for pid, _ in sessions]
-    return _timeline_axis(labels, "\n".join(body))
+    labeled = [(base, f"P{disp_pid(pid)}") for pid, _, base in rows]
+    return _timeline_axis(labeled, ymax, headers, "\n".join(body))
 
 
 def _score_chart(groups: dict[str, str], cond: str, csv_name: str, raw_value,
                  avg_value, threshold: float, trig_kinds: set[str],
                  trig_color: str) -> str:
     sessions = _sessions(cond, groups)
-    n = len(sessions)
+    rows, ymax, headers = _layout(sessions, groups)
     body = []
-    for i, (pid, d) in enumerate(sessions):
-        base = _row_base(i, n)
-        rows = _read_rows(d, csv_name)
+    for i, (pid, d, base) in enumerate(rows):
+        data = _read_rows(d, csv_name)
         body.extend(_score_row_body(
             base,
-            _score_series(rows, raw_value),
-            _score_series(rows, avg_value),
+            _score_series(data, raw_value),
+            _score_series(data, avg_value),
             threshold,
             _event_times(d, trig_kinds), trig_color,
             annotate01=(i == 0)))
-    labels = [f"P{disp_pid(pid)}" for pid, _ in sessions]
-    return _timeline_axis(labels, "\n".join(body))
+    labeled = [(base, f"P{disp_pid(pid)}") for pid, _, base in rows]
+    return _timeline_axis(labeled, ymax, headers, "\n".join(body))
 
 
 def build_session_logs(groups: dict[str, str]) -> str:
