@@ -20,6 +20,10 @@ and grouping can never diverge from the appendix.
 
 from __future__ import annotations
 
+import csv
+import glob
+import os
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -266,6 +270,60 @@ def main() -> None:
             print(f"    Q{i}: overall {v.mean():.2f}  "
                   f"ADHD {a.mean():.2f}  Control {c.mean():.2f}")
             _mwu(a, c, f"{prefix}{i}")
+
+    # ------------------------------------- 7. frustration mechanism (exploratory)
+    print("\n[7] TLX Frustration mechanism — exploratory correlations")
+    print("    Robot-minus-control frustration delta vs per-participant robot-")
+    print("    session behaviour from the parsed logs. Seven correlations —")
+    print("    treat every p as exploratory/uncorrected (a 'significant' hit")
+    print("    among this many tests would itself need correction).")
+    fr_r = post.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
+        pd.to_numeric, errors="coerce")
+    fr_c = ctrl.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
+        pd.to_numeric, errors="coerce")
+    logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+    rows = []
+    for d in sorted(glob.glob(os.path.join(logs_dir, "P*_Robot_*_csv"))):
+        pid = os.path.basename(d).split("_")[0][1:]
+        if pid not in fr_r.index or pid not in fr_c.index:
+            continue
+        events = list(csv.DictReader(open(os.path.join(d, "events.csv"))))
+        lats = [float(r["value"]) / 1000 for r in events
+                if r["event_type"] == "turn_latency_first_audio" and r["value"]]
+        user_s = robot_s = 0.0
+        for r in csv.DictReader(open(os.path.join(d, "speech.csv"))):
+            dur = float(r["duration_s"]) if r["duration_s"] else 0.0
+            if r["actor"] == "user":
+                user_s += dur
+            else:
+                robot_s += dur
+        rows.append({
+            "pid": pid,
+            "n_eng": sum(1 for r in events
+                         if r["event_type"] == "intervention_engagement_sent"),
+            "n_emo": sum(1 for r in events
+                         if r["event_type"] == "intervention_emotion_sent"),
+            "med_lat_s": pd.Series(lats).median() if lats else np.nan,
+            "n_turns": len(lats),
+            "user_min": user_s / 60,
+            "robot_min": robot_s / 60,
+            "fr_delta": fr_r[pid] - fr_c[pid],
+        })
+    mech = pd.DataFrame(rows)
+    mech["n_tot"] = mech["n_eng"] + mech["n_emo"]
+    print(mech.round(2).sort_values("fr_delta", ascending=False)
+          .to_string(index=False))
+    for x, label in [("n_tot", "total interventions"),
+                     ("n_emo", "emotion interventions"),
+                     ("n_eng", "engagement interventions"),
+                     ("med_lat_s", "median first-audio latency"),
+                     ("user_min", "user talk-time"),
+                     ("robot_min", "robot talk-time"),
+                     ("n_turns", "spoken turns")]:
+        sub = mech.dropna(subset=[x])
+        r = stats.spearmanr(sub[x], sub["fr_delta"])
+        print(f"    Spearman {label} vs frustration delta "
+              f"(n={len(sub)}): rho={r.statistic:+.3f}, p={r.pvalue:.3f}")
 
     print("\nDone. Carry values over manually; nothing was written anywhere.")
 
