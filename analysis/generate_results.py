@@ -74,7 +74,7 @@ SHORT_LABELS = {
     "POST_FEAT_PRESENCE_3": "Felt like working alongside someone",
     "POST_FEAT_INATT_1": "Disengagement accurately detected",
     "POST_FEAT_INATT_2": "Re-engagement prompts well-timed",
-    "POST_FEAT_INATT_3": "Prompts helped me refocus",
+    "POST_FEAT_INATT_3": "Re-engagement prompts helped re-focus",
     "POST_FEAT_INATT_4": "Negative emotions accurately detected",
     "POST_FEAT_INATT_5": "Emotional responses appropriate",
     "POST_FEAT_CONTEXT_1": "Task guidance relevant",
