@@ -28,63 +28,29 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+# Scoring config, questionnaire loaders, and all session-log analysis live
+# in generate_appendix.py (single source of truth for numbers AND the
+# generated tables/charts); this script only adds terminal test reporting.
 from generate_appendix import (
-    FILE_PATTERNS, GROUP_ADHD, GROUP_CONTROL,
+    ESQR_SUBSCALES, FEATURE_BLOCKS, FILE_PATTERNS, FRUSTRATION_PREDICTORS,
+    GROUP_ADHD, GROUP_CONTROL, N_ESQR_ITEMS, N_NARS_ITEMS,
+    NARS_REVERSE_ITEMS, QUIET_BUFFER_S, TLX_DIMS,
     assign_groups, clean, load_qualtrics, newest_file, to_rank,
+    episode_records, frustration_mechanism, landmark_pairs,
+    quiet_engagement_medians,
+    _read_rows as _log_rows,
+    session_dirs as _session_dirs,
+    session_metrics as _session_metrics,
+    signal_polls as _polls,
+    extract_episodes as _episodes,
+    intervention_utterance_durations as _intervention_utterance_durations,
+    replay_counterfactuals as _replay_counterfactuals,
+    num_col as _num, mean_items as _mean_items, sus_scores as _sus_scores,
 )
-
-# ============================================================================
-# CONFIG — VERIFY the two mappings below against the Questionnaire Sheet
-# ============================================================================
-
-# ESQ-R subscales: official instrument (Strait et al. 2020) has 5 subscales
-# over 25 items, coded 0-3 (Never or rarely / Sometimes / Often / Very
-# often). Map each subscale to YOUR item numbers (PRE_ESQR_<n>) — your
-# Qualtrics order may not match the official listing (cf. the ASRS mapping).
-# Leave empty until verified: the report then gives overall + per-item means.
-# Mapping verified 26.08.2026 against Strait et al. (2020) Table 2 (25
-# retained items, five factors) by matching item text to our Qualtrics
-# order. 24/25 matched verbatim; our item 20 ("so wrapped up ... forget
-# other things") is assigned to Time Management by elimination (paper item
-# 42, the remaining Factor-2 slot; both are the working-memory item, though
-# the paper's copyright-abbreviated description reads differently).
-# Note: Factor 5 had the weakest internal consistency in the source
-# (alpha = .65) — worth a caveat if reported on its own.
-ESQR_SUBSCALES: dict[str, list[int]] = {
-    "Plan management": [6, 7, 12, 13, 14, 16, 17, 18, 22, 23, 24],
-    "Time management": [10, 11, 15, 20],
-    "Materials organization": [3, 8, 9],
-    "Emotional regulation": [4, 5, 21],
-    "Behavioral regulation": [1, 2, 19, 25],
-}
-
-# NARS reverse-scored items: the official scale's positively-worded S3 items
-# must be reverse-coded (1..5 -> 6-x) before totalling. Enter YOUR item
-# numbers (same numbering in PRE_NARS_<n> and POST_NARS_<n>).
-# Verified 26.08.2026 by item wording: our items 3 ("relaxed talking"),
-# 5 ("make friends"), 6 ("comforted being with") are the positively-worded
-# S3 trio of the official scale (Nomura et al. 2006); the remaining 11 are
-# negatively worded. Higher total = more negative attitude.
-NARS_REVERSE_ITEMS: set[int] = {3, 5, 6}
-
-N_NARS_ITEMS = 14
-N_ESQR_ITEMS = 25
-TLX_DIMS = ["MENTAL", "PHYSICAL", "TEMPORAL", "PERFORMANCE", "EFFORT",
-            "FRUSTRATION"]
-FEATURE_BLOCKS = [
-    ("Body doubling / presence", "POST_FEAT_PRESENCE_", 3),
-    ("Inattention detection", "POST_FEAT_INATT_", 5),
-    ("Context-aware support", "POST_FEAT_CONTEXT_", 4),
-    ("Overall experience", "POST_FEAT_OVERALL_", 3),
-]
-
 
 # ============================================================================
 # Helpers
 # ============================================================================
-
-def _num(df: pd.DataFrame, col: str) -> pd.Series:
-    return pd.to_numeric(df[col], errors="coerce") if col in df else pd.Series(dtype=float)
 
 
 def _desc(s: pd.Series) -> str:
@@ -130,28 +96,6 @@ def _by_group(df: pd.DataFrame, groups: dict, series: pd.Series):
     return series[mask_a], series[mask_c]
 
 
-def _sus_scores(post: pd.DataFrame) -> pd.Series:
-    vals = []
-    for _, r in post.iterrows():
-        items = [pd.to_numeric(r.get(f"POST_SUS_{i}"), errors="coerce")
-                 for i in range(1, 11)]
-        if any(pd.isna(v) for v in items):
-            vals.append(np.nan)
-            continue
-        vals.append(sum((v - 1) if i % 2 == 1 else (5 - v)
-                        for i, v in enumerate(items, 1)) * 2.5)
-    return pd.Series(vals, index=post.index)
-
-
-def _mean_items(df: pd.DataFrame, prefix: str, items: list[int],
-                reverse: set[int] | None = None, scale_max: int = 5) -> pd.Series:
-    cols = []
-    for i in items:
-        s = _num(df, f"{prefix}{i}")
-        if reverse and i in reverse:
-            s = (scale_max + 1) - s
-        cols.append(s)
-    return pd.concat(cols, axis=1).mean(axis=1)
 
 
 # ============================================================================
@@ -277,53 +221,174 @@ def main() -> None:
     print("    session behaviour from the parsed logs. Seven correlations —")
     print("    treat every p as exploratory/uncorrected (a 'significant' hit")
     print("    among this many tests would itself need correction).")
-    fr_r = post.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
-        pd.to_numeric, errors="coerce")
-    fr_c = ctrl.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
-        pd.to_numeric, errors="coerce")
-    logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-    rows = []
-    for d in sorted(glob.glob(os.path.join(logs_dir, "P*_Robot_*_csv"))):
-        pid = os.path.basename(d).split("_")[0][1:]
-        if pid not in fr_r.index or pid not in fr_c.index:
-            continue
-        events = list(csv.DictReader(open(os.path.join(d, "events.csv"))))
-        lats = [float(r["value"]) / 1000 for r in events
-                if r["event_type"] == "turn_latency_first_audio" and r["value"]]
-        user_s = robot_s = 0.0
-        for r in csv.DictReader(open(os.path.join(d, "speech.csv"))):
-            dur = float(r["duration_s"]) if r["duration_s"] else 0.0
-            if r["actor"] == "user":
-                user_s += dur
-            else:
-                robot_s += dur
-        rows.append({
-            "pid": pid,
-            "n_eng": sum(1 for r in events
-                         if r["event_type"] == "intervention_engagement_sent"),
-            "n_emo": sum(1 for r in events
-                         if r["event_type"] == "intervention_emotion_sent"),
-            "med_lat_s": pd.Series(lats).median() if lats else np.nan,
-            "n_turns": len(lats),
-            "user_min": user_s / 60,
-            "robot_min": robot_s / 60,
-            "fr_delta": fr_r[pid] - fr_c[pid],
-        })
-    mech = pd.DataFrame(rows)
-    mech["n_tot"] = mech["n_eng"] + mech["n_emo"]
+    mech = frustration_mechanism(post, ctrl)
     print(mech.round(2).sort_values("fr_delta", ascending=False)
           .to_string(index=False))
-    for x, label in [("n_tot", "total interventions"),
-                     ("n_emo", "emotion interventions"),
-                     ("n_eng", "engagement interventions"),
-                     ("med_lat_s", "median first-audio latency"),
-                     ("user_min", "user talk-time"),
-                     ("robot_min", "robot talk-time"),
-                     ("n_turns", "spoken turns")]:
+    for x, label in FRUSTRATION_PREDICTORS:
         sub = mech.dropna(subset=[x])
         r = stats.spearmanr(sub[x], sub["fr_delta"])
         print(f"    Spearman {label} vs frustration delta "
               f"(n={len(sub)}): rho={r.statistic:+.3f}, p={r.pvalue:.3f}")
+
+    # ------------------------------------- 8. session-log descriptives
+    print("\n[8] Session-log descriptives per condition and group")
+    print("    Counterfactual caveat: control counts are an upper bound —")
+    print("    no conversation exists there to reset the interaction")
+    print("    cooldown (only counterfactual fires do), so gating is")
+    print("    strictly looser than in the robot condition. See [9e].")
+    sdirs = _session_dirs()
+    met = {k: _session_metrics(d, k[1]) for k, d in sdirs.items() if k[0] in groups}
+    metric_rows = [
+        ("robot_turns", "Robot turns (transcripts)", ("Robot",)),
+        ("user_turns", "User turns (transcripts)", ("Robot",)),
+        ("robot_min", "Robot talk-time (min)", ("Robot",)),
+        ("user_min", "User talk-time (min)", ("Robot",)),
+        ("context", "Context submissions", ("Robot",)),
+        ("int_eng", "Engagement interventions", ("Robot", "Control")),
+        ("int_emo", "Emotion interventions", ("Robot", "Control")),
+        ("int_tot", "All interventions", ("Robot", "Control")),
+    ]
+    for cond in ("Robot", "Control"):
+        pids = sorted((p for p, c in met if c == cond), key=int)
+        tag = "  [counterfactuals = upper bound]" if cond == "Control" else ""
+        print(f"\n  {cond} sessions (n={len(pids)}){tag}")
+        for key, label, conds in metric_rows:
+            if cond not in conds:
+                continue
+            s = pd.Series({p: met[(p, cond)][key] for p in pids}, dtype=float)
+            a = s[[p for p in pids if groups[p] == GROUP_ADHD]]
+            c = s[[p for p in pids if groups[p] == GROUP_CONTROL]]
+            print(f"    {label:<25} median {s.median():6.1f} "
+                  f"[{s.quantile(.25):.1f}; {s.quantile(.75):.1f}]  "
+                  f"SD {s.std(ddof=1):5.1f}  range {s.min():.0f}-{s.max():.0f}  "
+                  f"| ADHD md {a.median():.1f} / Ctrl md {c.median():.1f}")
+            _mwu(a, c, label)
+
+    # ------------------------------------- 9. episodes & recovery
+    print("\n[9] Below-threshold episodes and recovery")
+    print("    Episode = >=2 consecutive polls with the monitor signal past")
+    print("    its threshold (engagement rolling avg < 0.80 / windowed")
+    print("    negative share > 0.60). Recovery = episode start to the")
+    print("    first back-at-threshold poll. Sensing gaps >30 s or session")
+    print("    end censor an episode (recovery unobserved).")
+    ep, spans = episode_records(groups, sdirs)
+
+    print("\n[9a] Episode inventory")
+    for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
+        for cond in ("Robot", "Control"):
+            sub = ep[(ep.sig == sig) & (ep.cond == cond)]
+            obs = sub.dur.dropna()
+            line = (f"  {signame:<10} {cond:<7} episodes={len(sub)} "
+                    f"(censored {int(sub.censored.sum())}, "
+                    f"cued {int(sub.cued.sum())})")
+            if len(obs):
+                line += (f"  recovery median {obs.median():.0f}s "
+                         f"[{obs.quantile(.25):.0f}; {obs.quantile(.75):.0f}]")
+            print(line)
+
+    print("\n[9b] Within-robot: cue delivered vs gate-suppressed episodes")
+    print("     WARNING immortal-time bias: an episode only receives a cue")
+    print("     if it survives until the gates open, so fast-recovering")
+    print("     episodes land in 'suppressed' by construction — the naive")
+    print("     medians below are NOT evidence and are printed only for")
+    print("     completeness. The landmark test is the valid comparison:")
+    print("     remaining time after the cue vs remaining time of the")
+    print("     suppressed episodes still ongoing at the same elapsed")
+    print("     time (risk-set matched medians, Wilcoxon signed-rank over")
+    print("     delivered episodes). Residual caveats: gating follows")
+    print("     conversation timing (not randomised) and episodes pool")
+    print("     across participants (clustering unmodelled).")
+    for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
+        sub = ep[(ep.sig == sig) & (ep.cond == "Robot")]
+        cued, sup = sub[sub.cued].dur.dropna(), sub[~sub.cued].dur.dropna()
+        if not (len(cued) and len(sup)):
+            print(f"  {signame}: too few episodes")
+            continue
+        print(f"  {signame}: delivered n={len(cued)} median {cued.median():.0f}s"
+              f" | suppressed n={len(sup)} median {sup.median():.0f}s"
+              "   [naive, length-biased]")
+        rce = sub.rec_cue_end.dropna()
+        if len(rce):
+            print(f"    recovery from cue-utterance END (delivered only, "
+                  f"n={len(rce)}): median {rce.median():.0f}s "
+                  f"[{rce.quantile(.25):.0f}; {rce.quantile(.75):.0f}]")
+        for lm, lm_label in (("start", "cue START"), ("end", "cue END  ")):
+            dvals, mvals = landmark_pairs(sub, lm)
+            if len(dvals) >= 5:
+                try:
+                    w = stats.wilcoxon(dvals, mvals)
+                    wtxt = f"W={w.statistic:.1f}, p={w.pvalue:.3f}"
+                except ValueError as exc:
+                    wtxt = f"not computable ({exc})"
+                print(f"    landmark at {lm_label} (n={len(dvals)}): remaining "
+                      f"median {dvals.median():.0f}s vs matched suppressed "
+                      f"{mvals.median():.0f}s; Wilcoxon {wtxt}")
+            else:
+                print(f"    landmark at {lm_label}: only {len(dvals)} "
+                      "matchable delivered episodes — too few to test")
+        print("    NOTE if the two landmarks disagree in direction, the")
+        print("    within-robot contrast is not robust — report the")
+        print("    after-cue-end recovery descriptively instead.")
+
+    print("\n[9c] Cross-condition (paired per participant; camera caveat")
+    print("     applies unless [9d] clears it)")
+    for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
+        sub = ep[ep.sig == sig]
+        med = sub.dropna(subset=["dur"]).groupby(["pid", "cond"]).dur.median().unstack()
+        below = sub.assign(bt=sub.dur.fillna(sub.low_bound)).groupby(
+            ["pid", "cond"]).bt.sum().unstack().reindex(
+            sorted({p for p, c, s in spans if s == sig}, key=int)).fillna(0.0)
+        pct = pd.DataFrame({
+            cond: pd.Series({p: 100 * below.loc[p, cond] / spans[(p, cond, sig)]
+                             for p in below.index if (p, cond, sig) in spans})
+            for cond in ("Robot", "Control")})
+        print(f"  {signame} — median recovery (s), participants with episodes "
+              f"in both conditions:")
+        if {"Robot", "Control"} <= set(med.columns):
+            _paired_tests(med["Robot"], med["Control"], "Robot", "Control")
+        print(f"  {signame} — % of observed time past threshold "
+              f"(all {len(pct)} participants):")
+        print(f"    Robot md {pct['Robot'].median():.1f}% / "
+              f"Control md {pct['Control'].median():.1f}%")
+        _paired_tests(pct["Robot"], pct["Control"], "Robot", "Control")
+
+    print("\n[9d] Camera check — raw engagement medians outside interaction")
+    print(f"     windows (samples within {QUIET_BUFFER_S:.0f}s after any speech")
+    print("     excluded in the robot session; control has no speech). If the")
+    print("     robot-vs-control offset persists here, it is optics/geometry,")
+    print("     not head motion during speech.")
+    q = quiet_engagement_medians(groups, sdirs)
+    print(f"    Robot all-samples median of medians {q['robot_all'].median():.3f} | "
+          f"Robot quiet-only {q['robot_quiet'].median():.3f} "
+          f"(median {q['n_quiet'].median():.0f} quiet samples/session) | "
+          f"Control {q['control'].median():.3f}")
+    print("    Robot QUIET vs Control (the fair comparison):")
+    _paired_tests(q["robot_quiet"], q["control"], "Robot-quiet", "Control")
+    print("    Robot ALL vs Control (reference):")
+    _paired_tests(q["robot_all"], q["control"], "Robot-all", "Control")
+
+    print("\n[9e] Replay sensitivity — control counterfactuals with each")
+    print("     fire carrying an intervention utterance's gating footprint")
+    print("     (speaking gate closed during it, interaction cooldown from")
+    print("     its end). Still an upper bound: ordinary conversation —")
+    print("     the dominant suppressor in robot sessions — has no control")
+    print("     counterpart and is not simulated.")
+    idurs = pd.Series(_intervention_utterance_durations(sdirs))
+    print(f"    intervention utterance length (robot sessions, n={len(idurs)}): "
+          f"mean {idurs.mean():.1f}s, median {idurs.median():.1f}s")
+    dur = float(idurs.mean())
+    tot_log = tot_r0 = tot_rd = 0
+    print("    pid  logged  replay(0s)  replay(utterance)")
+    for pid, cond in sorted(met, key=lambda k: int(k[0])):
+        if cond != "Control":
+            continue
+        d = sdirs[(pid, cond)]
+        logged = met[(pid, cond)]["int_tot"]
+        r0, rd = _replay_counterfactuals(d, 0.0), _replay_counterfactuals(d, dur)
+        tot_log += logged; tot_r0 += r0; tot_rd += rd
+        print(f"    P{pid:<3} {logged:6d} {r0:9d} {rd:14d}")
+    print(f"    TOTAL{tot_log:6d} {tot_r0:9d} {tot_rd:14d}   "
+          "(replay(0s) validates the replay against the deployed logic)")
 
     print("\nDone. Carry values over manually; nothing was written anywhere.")
 

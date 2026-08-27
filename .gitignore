@@ -14,6 +14,8 @@ analysis/logs/
 experiments/**/results_*
 imperial-gpu-cluster.md
 study-day-runbook.md
+study-day-runbook-imperial.md
+participant_page_bridge.sh
 study_llm.sbatch
 sandbox_s2s.sbatch
 v2_gateway_tunnels.sh

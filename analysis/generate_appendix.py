@@ -34,6 +34,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from scipy import stats as scistats
 
 # ============================================================================
 # CONFIG — edit here
@@ -72,7 +73,8 @@ LIKERT_CHART_HEIGHT = "2.2cm"
 THESIS_APX_DIR = os.path.expanduser(
     "~/Projects/MSc-Project-Final-Report/apx-subfiles")
 SYNC_FILES = ["apx_pre_study.tex", "apx_post_control.tex", "apx_post_robot.tex",
-              "apx_session_logs.tex"]
+              "apx_session_logs.tex", "apx_session_stats.tex",
+              "apx_instrument_stats.tex"]
 
 # Short subheaders for the open-ended questions (the full question text is
 # still printed above each answer table). Keys are CSV column names.
@@ -402,11 +404,88 @@ def assign_groups(pre: pd.DataFrame) -> dict[str, str]:
 
 
 # ============================================================================
+# Questionnaire scoring (shared with compute_stats.py)
+# ============================================================================
+
+# ESQ-R subscales: official instrument (Strait et al. 2020) has 5 subscales
+# over 25 items, coded 0-3. Mapping verified 26.08.2026 against Strait et
+# al. (2020) Table 2 by matching item text to our Qualtrics order. 24/25
+# matched verbatim; our item 20 is assigned to Time Management by
+# elimination (paper item 42, the remaining Factor-2 slot). Factor 5 had
+# the weakest internal consistency in the source (alpha = .65).
+ESQR_SUBSCALES: dict[str, list[int]] = {
+    "Plan management": [6, 7, 12, 13, 14, 16, 17, 18, 22, 23, 24],
+    "Time management": [10, 11, 15, 20],
+    "Materials organization": [3, 8, 9],
+    "Emotional regulation": [4, 5, 21],
+    "Behavioral regulation": [1, 2, 19, 25],
+}
+
+# NARS reverse-scored items, verified 26.08.2026 by item wording: our items
+# 3, 5, 6 are the positively-worded S3 trio of the official scale (Nomura
+# et al. 2006). Higher total = more negative attitude.
+NARS_REVERSE_ITEMS: set[int] = {3, 5, 6}
+
+N_NARS_ITEMS = 14
+N_ESQR_ITEMS = 25
+TLX_DIMS = ["MENTAL", "PHYSICAL", "TEMPORAL", "PERFORMANCE", "EFFORT",
+            "FRUSTRATION"]
+FEATURE_BLOCKS = [
+    ("Body doubling / presence", "POST_FEAT_PRESENCE_", 3),
+    ("Inattention detection", "POST_FEAT_INATT_", 5),
+    ("Context-aware support", "POST_FEAT_CONTEXT_", 4),
+    ("Overall experience", "POST_FEAT_OVERALL_", 3),
+]
+
+# Frustration-mechanism predictors (exploratory Spearman correlations
+# against the robot-minus-control TLX frustration delta).
+FRUSTRATION_PREDICTORS = [
+    ("n_tot", "Total interventions"),
+    ("n_emo", "Emotion interventions"),
+    ("n_eng", "Engagement interventions"),
+    ("med_lat_s", "Median first-audio latency (s)"),
+    ("user_min", "User talk-time (min)"),
+    ("robot_min", "Robot talk-time (min)"),
+    ("n_turns", "Spoken turns"),
+]
+
+
+def num_col(df: pd.DataFrame, col: str) -> pd.Series:
+    return pd.to_numeric(df[col], errors="coerce") if col in df else pd.Series(dtype=float)
+
+
+def mean_items(df: pd.DataFrame, prefix: str, items: list[int],
+               reverse: set[int] | None = None, scale_max: int = 5) -> pd.Series:
+    cols = []
+    for i in items:
+        s = num_col(df, f"{prefix}{i}")
+        if reverse and i in reverse:
+            s = (scale_max + 1) - s
+        cols.append(s)
+    return pd.concat(cols, axis=1).mean(axis=1)
+
+
+def sus_scores(post: pd.DataFrame) -> pd.Series:
+    vals = []
+    for _, r in post.iterrows():
+        items = [pd.to_numeric(r.get(f"POST_SUS_{i}"), errors="coerce")
+                 for i in range(1, 11)]
+        if any(pd.isna(v) for v in items):
+            vals.append(np.nan)
+            continue
+        vals.append(sum((v - 1) if i % 2 == 1 else (5 - v)
+                        for i, v in enumerate(items, 1)) * 2.5)
+    return pd.Series(vals, index=post.index)
+
+
+# ============================================================================
 # LaTeX renderers
 # ============================================================================
 
 ADHD_COLOR = "ApxADHD"
 CTRL_COLOR = "ApxControl"
+COND_ROBOT_COLOR = "ApxCondRobot"
+COND_CTRL_COLOR = "ApxCondControl"
 
 PREAMBLE_SNIPPET = r"""% ---------------------------------------------------------------
 % Requirements for the auto-generated appendix fragments.
@@ -415,6 +494,7 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \usepackage{amsmath}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.17}
+\usepgfplotslibrary{statistics}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{pdflscape}
@@ -426,6 +506,8 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \definecolor{ApxSilence}{RGB}{235,235,235}     % session timelines: no speech
 \definecolor{ApxTrigEng}{RGB}{187,34,34}       % engagement trigger marks
 \definecolor{ApxTrigEmo}{RGB}{34,136,85}       % emotion trigger marks
+\definecolor{ApxCondRobot}{RGB}{170,68,153}    % condition charts: robot session
+\definecolor{ApxCondControl}{RGB}{119,119,119} % condition charts: control session
 % ---------------------------------------------------------------
 """
 
@@ -1233,6 +1315,1107 @@ def _score_chart(groups: dict[str, str], cond: str, csv_name: str, raw_value,
     return _timeline_axis(labeled, ymax, headers, "\n".join(body))
 
 
+# ============================================================================
+# Session-log analysis (shared with compute_stats.py) + stats fragment
+# ============================================================================
+
+EPISODE_CENSOR_GAP_S = 30.0  # inter-poll gap that censors an open episode
+# A raw engagement score at time t is inferred from ~10 frames ending at t
+# (~7-9 s of video at the effective recording rate), so a sample is treated
+# as interaction-contaminated if any speech ended less than this many
+# seconds before it (also absorbs post-speech head settling).
+QUIET_BUFFER_S = 15.0
+INTERACTION_COOLDOWN_S = 60.0  # mirror intervention_monitor.py
+INTERVENTION_COOLDOWN_S = 60.0
+REPLAY_MIN_SAMPLES = 3
+
+
+def session_dirs() -> dict[tuple[str, str], str]:
+    """(pid, 'Robot'|'Control') -> parsed-csv dir (newest if duplicated)."""
+    out: dict[tuple[str, str], str] = {}
+    for d in sorted(glob.glob(os.path.join(SESSION_LOGS_DIR, "P*_csv"))):
+        parts = os.path.basename(d).split("_")
+        out[(parts[0][1:], parts[1])] = d
+    return out
+
+
+def session_metrics(dirpath: str, cond: str) -> dict:
+    ev = _read_rows(dirpath, "events.csv")
+
+    def n(kind: str) -> int:
+        return sum(1 for r in ev if r["event_type"] == kind)
+
+    user_s = robot_s = 0.0
+    for r in _read_rows(dirpath, "speech.csv"):
+        if r["actor"] == "user":
+            user_s += float(r["duration_s"] or 0)
+        else:
+            robot_s += float(r["duration_s"] or 0)
+    eng = n("intervention_engagement_sent" if cond == "Robot"
+            else "counterfactual_engagement")
+    emo = n("intervention_emotion_sent" if cond == "Robot"
+            else "counterfactual_emotion")
+    return {
+        "robot_turns": n("transcript_assistant"),
+        "user_turns": n("transcript_user"),
+        "context": n("context_submit"),
+        "robot_min": robot_s / 60, "user_min": user_s / 60,
+        "int_eng": eng, "int_emo": emo, "int_tot": eng + emo,
+    }
+
+
+def signal_polls(dirpath: str, which: str) -> list[tuple[float, bool]]:
+    """(t_session_s, signal_active) for value-bearing polls, in time order.
+    'eng': rolling average < threshold; 'emo': windowed negative share >
+    threshold — i.e. exactly the signal each monitor gates on."""
+    rows = _read_rows(dirpath, "engagement.csv" if which == "eng" else "emotion.csv")
+    out = []
+    for r in rows:
+        t_raw = r.get("t_session_s") or ""
+        val = r.get("average" if which == "eng" else "negative_share") or ""
+        thr = r.get("threshold") or ""
+        if not t_raw or not val or not thr:
+            continue
+        t = float(t_raw)
+        if t < 0:
+            continue
+        active = (float(val) < float(thr)) if which == "eng" else (float(val) > float(thr))
+        out.append((t, active))
+    return out
+
+
+def extract_episodes(polls: list[tuple[float, bool]], min_polls: int = 2) -> list[dict]:
+    """Group consecutive signal-active polls into episodes. t1 = first poll
+    back at threshold (None = censored by a sensing gap or series end).
+    Episodes with fewer than min_polls active polls are flicker, dropped."""
+    eps: list[dict] = []
+    cur: dict | None = None
+    prev_t: float | None = None
+    for t, active in polls:
+        if cur is not None and prev_t is not None and t - prev_t > EPISODE_CENSOR_GAP_S:
+            eps.append({**cur, "t1": None})
+            cur = None
+        if active:
+            if cur is None:
+                cur = {"t0": t, "n": 1, "t_last": t}
+            else:
+                cur["n"] += 1
+                cur["t_last"] = t
+        elif cur is not None:
+            eps.append({**cur, "t1": t})
+            cur = None
+        prev_t = t
+    if cur is not None:
+        eps.append({**cur, "t1": None})
+    return [e for e in eps if e["n"] >= min_polls]
+
+
+def intervention_utterance_durations(sdirs: dict) -> list[float]:
+    """Duration of the robot utterance each sent intervention produced:
+    first robot speech segment starting within 20 s of the send event."""
+    durs = []
+    for (pid, cond), d in sdirs.items():
+        if cond != "Robot":
+            continue
+        speech = [(float(r["t_start_s"]), float(r["duration_s"]))
+                  for r in _read_rows(d, "speech.csv")
+                  if r["actor"] == "robot" and r["t_start_s"]]
+        for r in _read_rows(d, "events.csv"):
+            if r["event_type"] in ("intervention_engagement_sent",
+                                   "intervention_emotion_sent") and r["t_session_s"]:
+                t = float(r["t_session_s"])
+                cand = [dur for ss, dur in speech if t <= ss <= t + 20]
+                if cand:
+                    durs.append(cand[0])
+    return durs
+
+
+def replay_counterfactuals(dirpath: str, speech_dur: float) -> int:
+    """Re-run the intervention gate logic over a control session's poll
+    series, as if each fire produced a robot utterance of speech_dur
+    seconds: the speaking gate is closed during it and the interaction
+    cooldown restarts at its END (matching the treatment app, where
+    assistant audio keeps resetting the activity clock until playback
+    ends). speech_dur=0 reproduces the deployed control behaviour
+    ('cooldowns reset as if sent' at fire time)."""
+    stream: list[tuple[float, str, bool]] = []
+    for which in ("eng", "emo"):
+        polls = signal_polls(dirpath, which)
+        for i, (t, active) in enumerate(polls):
+            enough = sum(1 for tt, _ in polls[max(0, i - 10):i + 1]
+                         if t - 30.0 < tt <= t) >= REPLAY_MIN_SAMPLES
+            stream.append((t, which, active and enough))
+    last_fire = {"eng": -1e9, "emo": -1e9}
+    busy_until = -1e9  # end of the (synthetic) utterance = activity-clock reset
+    count = 0
+    for t, which, fireable in sorted(stream):
+        if not fireable:
+            continue
+        if t <= busy_until:  # robot would still be speaking
+            continue
+        if t - busy_until <= INTERACTION_COOLDOWN_S:
+            continue
+        if t - last_fire[which] <= INTERVENTION_COOLDOWN_S:
+            continue
+        count += 1
+        last_fire[which] = t
+        busy_until = t + speech_dur
+    return count
+
+
+def episode_records(groups: dict, sdirs: dict) -> tuple[pd.DataFrame, dict]:
+    """One row per below-threshold episode across all sessions, plus the
+    observed poll span (s) per (pid, cond, signal) for %-time metrics."""
+    recs, spans = [], {}
+    for (pid, cond), d in sdirs.items():
+        if pid not in groups:
+            continue
+        events = _read_rows(d, "events.csv")
+        speech = [(float(r["t_start_s"]), float(r["t_end_s"]))
+                  for r in _read_rows(d, "speech.csv")
+                  if r["actor"] == "robot" and r["t_start_s"]]
+        for which in ("eng", "emo"):
+            polls = signal_polls(d, which)
+            if len(polls) > 1:
+                spans[(pid, cond, which)] = polls[-1][0] - polls[0][0]
+            base = "engagement" if which == "eng" else "emotion"
+            kind = (f"intervention_{base}" if cond == "Robot"
+                    else f"counterfactual_{base}")
+            cues = [float(r["t_session_s"]) for r in events
+                    if r["event_type"] == kind and r["t_session_s"]]
+            for e in extract_episodes(polls):
+                end = e["t1"] if e["t1"] is not None else e["t_last"]
+                cue_ts = [t for t in cues if e["t0"] - 5 <= t <= end]
+                rec_cue_end = np.nan
+                if cue_ts and cond == "Robot" and e["t1"] is not None:
+                    segs = [se for ss, se in speech
+                            if cue_ts[0] <= ss <= cue_ts[0] + 20]
+                    if segs:
+                        rec_cue_end = max(e["t1"] - segs[0], 0.0)
+                recs.append({
+                    "pid": pid, "cond": cond, "sig": which,
+                    "dur": (e["t1"] - e["t0"]) if e["t1"] is not None else np.nan,
+                    "low_bound": (e["t_last"] - e["t0"]) if e["t1"] is None else np.nan,
+                    "censored": e["t1"] is None,
+                    "cued": bool(cue_ts), "rec_cue_end": rec_cue_end,
+                    "elapsed_at_cue": (max(cue_ts[0] - e["t0"], 0.0)
+                                       if cue_ts else np.nan),
+                    "remaining_after_cue": (max(e["t1"] - cue_ts[0], 0.0)
+                                            if cue_ts and e["t1"] is not None
+                                            else np.nan),
+                })
+    return pd.DataFrame(recs), spans
+
+
+def landmark_pairs(sub: pd.DataFrame, landmark: str) -> tuple[pd.Series, pd.Series]:
+    """Risk-set matched landmark comparison for one signal's robot episodes.
+    For each cue-delivered episode: remaining time from the landmark ('start'
+    of the cue, or 'end' of its utterance) paired with the median remaining
+    time of the gate-suppressed episodes still ongoing at the same elapsed
+    time (>=3 at risk required). Corrects the immortal-time bias of the
+    naive delivered-vs-suppressed comparison."""
+    sup = sub[~sub.cued].dur.dropna()
+    deliv = sub[sub.cued].dropna(subset=["remaining_after_cue"])
+    d, m = [], []
+    for _, row in deliv.iterrows():
+        if landmark == "start":
+            elapsed, remaining = row.elapsed_at_cue, row.remaining_after_cue
+        else:
+            if pd.isna(row.rec_cue_end):
+                continue
+            elapsed = row.elapsed_at_cue + row.remaining_after_cue - row.rec_cue_end
+            remaining = row.rec_cue_end
+        at_risk = sup[sup > elapsed] - elapsed
+        if len(at_risk) >= 3:
+            d.append(remaining)
+            m.append(at_risk.median())
+    return pd.Series(d, dtype=float), pd.Series(m, dtype=float)
+
+
+def quiet_engagement_medians(groups: dict, sdirs: dict) -> pd.DataFrame:
+    """Per participant: median raw engagement score in the robot session
+    (all samples, and interaction-quiet samples only) and in the control
+    session. Quiet = no speech by either actor within QUIET_BUFFER_S
+    before the sample."""
+    rows = {}
+    for (pid, cond), d in sdirs.items():
+        if pid not in groups:
+            continue
+        speech = [(float(r["t_start_s"]), float(r["t_end_s"]))
+                  for r in _read_rows(d, "speech.csv") if r["t_start_s"]]
+        allv, quiet = [], []
+        for r in _read_rows(d, "engagement.csv"):
+            if not (r.get("t_session_s") and r.get("score")):
+                continue
+            t, v = float(r["t_session_s"]), float(r["score"])
+            allv.append(v)
+            if not any(ss <= t and se >= t - QUIET_BUFFER_S for ss, se in speech):
+                quiet.append(v)
+        rec = rows.setdefault(pid, {})
+        if cond == "Robot":
+            rec["robot_all"] = np.median(allv) if allv else np.nan
+            rec["robot_quiet"] = np.median(quiet) if quiet else np.nan
+            rec["n_quiet"] = len(quiet)
+        else:
+            rec["control"] = np.median(allv) if allv else np.nan
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def frustration_mechanism(post: pd.DataFrame, ctrl: pd.DataFrame) -> pd.DataFrame:
+    """Per participant: robot-session behaviour metrics from the parsed
+    logs plus the robot-minus-control TLX frustration delta."""
+    fr_r = post.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
+        pd.to_numeric, errors="coerce")
+    fr_c = ctrl.set_index("PID")["POST_TLX_FRUSTRATION_1"].pipe(
+        pd.to_numeric, errors="coerce")
+    rows = []
+    for (pid, cond), d in sorted(session_dirs().items()):
+        if cond != "Robot" or pid not in fr_r.index or pid not in fr_c.index:
+            continue
+        events = _read_rows(d, "events.csv")
+        lats = [float(r["value"]) / 1000 for r in events
+                if r["event_type"] == "turn_latency_first_audio" and r["value"]]
+        user_s = robot_s = 0.0
+        for r in _read_rows(d, "speech.csv"):
+            dur = float(r["duration_s"]) if r["duration_s"] else 0.0
+            if r["actor"] == "user":
+                user_s += dur
+            else:
+                robot_s += dur
+        n_eng = sum(1 for r in events
+                    if r["event_type"] == "intervention_engagement_sent")
+        n_emo = sum(1 for r in events
+                    if r["event_type"] == "intervention_emotion_sent")
+        rows.append({
+            "pid": pid, "n_eng": n_eng, "n_emo": n_emo, "n_tot": n_eng + n_emo,
+            "med_lat_s": pd.Series(lats).median() if lats else np.nan,
+            "n_turns": len(lats), "user_min": user_s / 60,
+            "robot_min": robot_s / 60, "fr_delta": fr_r[pid] - fr_c[pid],
+        })
+    return pd.DataFrame(rows)
+
+
+# --- renderers for the session-stats fragment --------------------------------
+
+# (key, table label, boxplot label, decimals)
+_ROBOT_METRICS = [
+    ("robot_turns", "Robot turns (transcript events)", "Robot\\\\turns", 0),
+    ("user_turns", "User turns (transcript events)", "User\\\\turns", 0),
+    ("robot_min", "Robot talk-time (min)", "Robot\\\\talk (min)", 1),
+    ("user_min", "User talk-time (min)", "User\\\\talk (min)", 1),
+    ("context", "Context submissions", "Context\\\\submits", 0),
+    ("int_eng", "Engagement interventions", "Engage-\\\\ment", 0),
+    ("int_emo", "Emotion interventions", "Emotion", 0),
+    ("int_tot", "All interventions", "All", 0),
+]
+_CTRL_METRICS = [
+    ("int_eng", "Engagement counterfactuals", "Engage-\\\\ment", 0),
+    ("int_emo", "Emotion counterfactuals", "Emotion", 0),
+    ("int_tot", "All counterfactuals", "All", 0),
+]
+
+
+def _metric_series(met: dict, groups: dict, cond: str, key: str,
+                   group: str | None = None) -> pd.Series:
+    pids = [p for (p, c) in met if c == cond
+            and (group is None or groups.get(p) == group)]
+    return pd.Series({p: met[(p, cond)][key] for p in pids}, dtype=float)
+
+
+def _fmt_mq(s: pd.Series, dec: int) -> str:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if not len(s):
+        return "--"
+    f = f"{{:.{dec}f}}"
+    return (f"{f.format(s.median())} [{f.format(s.quantile(.25))}; "
+            f"{f.format(s.quantile(.75))}]")
+
+
+def _session_metrics_table(met: dict, groups: dict, cond: str,
+                           metric_defs: list) -> str:
+    rows = []
+    for key, label, _, dec in metric_defs:
+        s_all = _metric_series(met, groups, cond, key)
+        s_a = _metric_series(met, groups, cond, key, GROUP_ADHD)
+        s_c = _metric_series(met, groups, cond, key, GROUP_CONTROL)
+        f = f"{{:.{dec}f}}"
+        rows.append(
+            f"{esc(label)} & {_fmt_mq(s_a, dec)} & {_fmt_mq(s_c, dec)} & "
+            f"{_fmt_mq(s_all, dec)} & {s_all.std(ddof=1):.1f} & "
+            f"{f.format(s_all.min())}--{f.format(s_all.max())} \\\\")
+    body = "\n".join(rows)
+    return f"""\\begin{{center}}\\small
+\\begin{{tabular}}{{lrrrrr}}
+\\toprule
+ & ADHD & Control & Overall & SD & Range \\\\
+ & \\multicolumn{{3}}{{c}}{{median [$Q_1$; $Q_3$]}} & & \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}
+\\end{{center}}
+"""
+
+
+def _box_stats(s: pd.Series) -> dict | None:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if len(s) < 3:
+        return None
+    q1, med, q3 = s.quantile(.25), s.median(), s.quantile(.75)
+    lo_f, hi_f = q1 - 1.5 * (q3 - q1), q3 + 1.5 * (q3 - q1)
+    inside = s[(s >= lo_f) & (s <= hi_f)]
+    return {"lw": inside.min(), "lq": q1, "med": med, "uq": q3,
+            "uw": inside.max(),
+            "outliers": sorted(s[(s < lo_f) | (s > hi_f)])}
+
+
+def _fmt_p(p: float) -> str:
+    if p < 0.001:
+        return "$p < .001$"
+    return f"$p = {p:.3f}$".replace("0.", ".", 1)
+
+
+def _mwu_cells(a: pd.Series, c: pd.Series) -> tuple[str, str]:
+    """(U, p) table cells for an ADHD-vs-Control Mann-Whitney U test."""
+    a, c = a.dropna(), c.dropna()
+    if len(a) < 2 or len(c) < 2:
+        return "--", "--"
+    u = scistats.mannwhitneyu(a, c, alternative="two-sided")
+    return f"{u.statistic:.1f}", _fmt_p(u.pvalue)
+
+
+def _wilcoxon_cells(a: pd.Series, b: pd.Series) -> tuple[str, str, int]:
+    """(W, p, n) for a paired Wilcoxon signed-rank test (aligned on index)."""
+    both = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna()
+    if len(both) < 3:
+        return "--", "--", len(both)
+    try:
+        w = scistats.wilcoxon(both["a"], both["b"])
+        return f"{w.statistic:.1f}", _fmt_p(w.pvalue), len(both)
+    except ValueError:  # all-zero differences
+        return "--", "(all diffs 0)", len(both)
+
+
+def _box_chart(cols: list, *, ylabel: str, width: str,
+               height: str = "5.2cm", ymin: float = 0,
+               ymax: float | None = None, reflines: list | None = None) -> str:
+    """Generic grouped box chart. cols = [(xlabel, [(color, series), ...])];
+    one or two boxes per column. reflines = [(y, label)] dashed guides."""
+    plots, ticks, labels = [], [], []
+    for i, (short, boxes) in enumerate(cols):
+        base = 2.0 * i
+        ticks.append(f"{base + 1.0:.1f}")
+        labels.append("{" + short + "}")
+        positions = ([base + 1.0] if len(boxes) == 1
+                     else [base + 0.62, base + 1.38])
+        for pos, (color, series) in zip(positions, boxes):
+            st = _box_stats(series)
+            if st is None:
+                continue
+            outs = " ".join(f"(0,{v:g})" for v in st["outliers"])
+            plots.append(
+                f"    \\addplot[boxplot prepared={{draw position={pos:.2f}, "
+                f"box extend=0.58, whisker extend=0.32, "
+                f"lower whisker={st['lw']:g}, lower quartile={st['lq']:g}, "
+                f"median={st['med']:g}, upper quartile={st['uq']:g}, "
+                f"upper whisker={st['uw']:g}}}, color={color}, "
+                f"fill={color}!25, mark=*, mark size=1pt, "
+                f"mark options={{color={color}, fill={color}}}] "
+                f"coordinates {{{outs}}};")
+    xmax = 2.0 * len(cols)
+    for y, lbl in (reflines or []):
+        plots.append(
+            f"    \\draw[dashed, black!55] (axis cs:0,{y:g}) -- "
+            f"(axis cs:{xmax:.1f},{y:g}) node[right, font=\\tiny, "
+            f"black!70, align=left] {{{lbl}}};")
+    body = "\n".join(plots)
+    ymax_opt = f" ymax={ymax:g}," if ymax is not None else ""
+    return f"""\\begin{{tikzpicture}}
+  \\begin{{axis}}[
+    width={width}, height={height},
+    boxplot/draw direction=y,
+    xmin=0, xmax={xmax:.1f},
+    xtick={{{",".join(ticks)}}}, xticklabels={{{",".join(labels)}}},
+    x tick label style={{font=\\scriptsize, align=center}},
+    ymin={ymin:g},{ymax_opt} ylabel={{{ylabel}}},
+    ylabel style={{font=\\small}}, y tick label style={{font=\\scriptsize}},
+    ymajorgrids, major grid style={{line width=0.3pt, draw=black!12}},
+    axis x line*=bottom, axis y line*=left, clip=false,
+  ]
+{body}
+  \\end{{axis}}
+\\end{{tikzpicture}}"""
+
+
+def _boxplot_panel(met: dict, groups: dict, cond: str, metric_defs: list, *,
+                   ylabel: str, width: str = "0.42\\textwidth") -> str:
+    cols = []
+    for key, _, short, _dec in metric_defs:
+        cols.append((short, [
+            (ADHD_COLOR, _metric_series(met, groups, cond, key, GROUP_ADHD)),
+            (CTRL_COLOR, _metric_series(met, groups, cond, key, GROUP_CONTROL)),
+        ]))
+    return _box_chart(cols, ylabel=ylabel, width=width)
+
+
+def _paired_lines_chart(both: pd.DataFrame, groups: dict, *, ylabel: str,
+                        xlabels: tuple[str, str] = ("Pre", "Post"),
+                        width: str = "0.5\\textwidth",
+                        ymin: float | None = None,
+                        ymax: float | None = None) -> str:
+    """One line per participant from column 0 to column 1 (index = PID),
+    group-coloured, with bold group-median overlays."""
+    a_col, b_col = both.columns[:2]
+    lines = []
+    for pid, row in both.dropna().iterrows():
+        color = ADHD_COLOR if groups.get(pid) == GROUP_ADHD else CTRL_COLOR
+        lines.append(
+            f"    \\addplot[color={color}!55, line width=0.5pt, mark=*, "
+            f"mark size=1pt, mark options={{fill={color}!55, "
+            f"draw={color}!55}}] coordinates "
+            f"{{(0,{row[a_col]:g}) (1,{row[b_col]:g})}};")
+    for gname, color in ((GROUP_ADHD, ADHD_COLOR), (GROUP_CONTROL, CTRL_COLOR)):
+        pids = [p for p in both.index if groups.get(p) == gname]
+        sub = both.loc[pids].dropna()
+        if len(sub) < 2:
+            continue
+        lines.append(
+            f"    \\addplot[color={color}, line width=1.4pt, mark=*, "
+            f"mark size=1.6pt] coordinates "
+            f"{{(0,{sub[a_col].median():g}) (1,{sub[b_col].median():g})}};")
+    rng = ""
+    if ymin is not None:
+        rng += f" ymin={ymin:g},"
+    if ymax is not None:
+        rng += f" ymax={ymax:g},"
+    body = "\n".join(lines)
+    return f"""\\begin{{tikzpicture}}
+  \\begin{{axis}}[
+    width={width}, height=5.8cm,
+    xmin=-0.35, xmax=1.35,
+    xtick={{0,1}}, xticklabels={{{xlabels[0]},{xlabels[1]}}},
+    x tick label style={{font=\\small}},{rng} ylabel={{{ylabel}}},
+    ylabel style={{font=\\small}}, y tick label style={{font=\\scriptsize}},
+    ymajorgrids, major grid style={{line width=0.3pt, draw=black!12}},
+    axis x line*=bottom, axis y line*=left,
+  ]
+{body}
+  \\end{{axis}}
+\\end{{tikzpicture}}"""
+
+
+def _scatter_chart(df: pd.DataFrame, groups: dict, *, xlabel: str,
+                   ylabel: str, width: str = "0.55\\textwidth",
+                   hline: float | None = None) -> str:
+    """Scatter of df['x'] vs df['y'] (index = PID), group-coloured."""
+    plots = []
+    for gname, color in ((GROUP_ADHD, ADHD_COLOR), (GROUP_CONTROL, CTRL_COLOR)):
+        pts = " ".join(f"({r.x:g},{r.y:g})"
+                       for pid, r in df.dropna().iterrows()
+                       if groups.get(pid) == gname)
+        if pts:
+            plots.append(
+                f"    \\addplot[only marks, mark=*, mark size=1.8pt, "
+                f"color={color}, fill opacity=0.85] coordinates {{{pts}}};")
+    body = "\n".join(plots)
+    extra_hline = ""
+    if hline is not None:
+        extra_hline = f"    extra y ticks={{{hline:g}}}, extra y tick style={{grid=major, grid style={{dashed, black!45}}}},\n"
+    return f"""\\begin{{tikzpicture}}
+  \\begin{{axis}}[
+    width={width}, height=6cm,
+    xlabel={{{xlabel}}}, ylabel={{{ylabel}}},
+    xlabel style={{font=\\small}}, ylabel style={{font=\\small}},
+    x tick label style={{font=\\scriptsize}},
+    y tick label style={{font=\\scriptsize}},
+{extra_hline}    ymajorgrids, major grid style={{line width=0.3pt, draw=black!12}},
+    axis x line*=bottom, axis y line*=left,
+  ]
+{body}
+  \\end{{axis}}
+\\end{{tikzpicture}}"""
+
+
+def _episode_table(ep: pd.DataFrame) -> str:
+    rows = []
+    for sig, signame in (("eng", "Engagement"), ("emo", "Negative affect")):
+        for cond in ("Robot", "Control"):
+            sub = ep[(ep.sig == sig) & (ep.cond == cond)]
+            s = sub.dur.dropna()
+            med = (f"{s.median():.0f} [{s.quantile(.25):.0f}; "
+                   f"{s.quantile(.75):.0f}]") if len(s) else "--"
+            rows.append(f"{signame} & {cond} & {len(sub)} & "
+                        f"{int(sub.cued.sum())} & {int(sub.censored.sum())} & "
+                        f"{med} \\\\")
+    body = "\n".join(rows)
+    return f"""\\begin{{center}}\\small
+\\begin{{tabular}}{{llrrrr}}
+\\toprule
+Signal & Session & Episodes & Cued & Censored & Recovery (s), median [$Q_1$; $Q_3$] \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}
+\\end{{center}}
+"""
+
+
+def _replay_table(groups: dict, sdirs: dict, met: dict) -> tuple[str, float]:
+    idurs = pd.Series(intervention_utterance_durations(sdirs))
+    dur = float(idurs.mean())
+    rows, totals = [], [0, 0, 0]
+    ordered = [p for g in (GROUP_ADHD, GROUP_CONTROL)
+               for p in sorted((p for p, gg in groups.items() if gg == g), key=int)
+               if (p, "Control") in met]
+    for pid in ordered:
+        d = sdirs[(pid, "Control")]
+        logged = met[(pid, "Control")]["int_tot"]
+        r0 = replay_counterfactuals(d, 0.0)
+        rd = replay_counterfactuals(d, dur)
+        totals = [totals[0] + logged, totals[1] + r0, totals[2] + rd]
+        rows.append(f"{disp_pid(pid)} & {groups[pid]} & {logged} & {r0} & {rd} \\\\")
+    body = "\n".join(rows)
+    table = f"""\\begin{{center}}\\small
+\\begin{{tabular}}{{llrrr}}
+\\toprule
+PID & Group & Logged & Replay (no utterance) & Replay ({dur:.0f}\\,s utterance) \\\\
+\\midrule
+{body}
+\\midrule
+Total & & {totals[0]} & {totals[1]} & {totals[2]} \\\\
+\\bottomrule
+\\end{{tabular}}
+\\end{{center}}
+"""
+    return table, dur
+
+
+def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
+                           post: pd.DataFrame, q_post: dict,
+                           groups: dict[str, str]) -> str:
+    """Tables + charts mirroring every questionnaire analysis in
+    compute_stats.py, test statistics included."""
+    out = [header_comment(["Qualtrics exports",
+                           "analysis/logs/P*_csv session logs"])]
+    n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
+    legend_box = (f"\\textcolor{{ApxADHD}}{{\\rule{{2ex}}{{1.2ex}}}} ADHD "
+                  f"($n = {n_a}$), "
+                  f"\\textcolor{{ApxControl}}{{\\rule{{2ex}}{{1.2ex}}}} "
+                  f"control ($n = {len(groups) - n_a}$); boxes span the "
+                  "quartiles, whiskers extend to the furthest value within "
+                  "1.5 IQR, dots are outliers.")
+    legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
+                   "session, \\textcolor{ApxCondControl}{\\rule{2ex}{1.2ex}} "
+                   "control session; boxes span the quartiles, whiskers "
+                   "extend to the furthest value within 1.5 IQR, dots are "
+                   "outliers.")
+    pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
+    pre_a = pre[pre["PID"].isin(pids_a)]
+    pre_c = pre[~pre["PID"].isin(pids_a)]
+
+    def by_group(df: pd.DataFrame, v: pd.Series) -> tuple[pd.Series, pd.Series]:
+        return v[df["PID"].isin(pids_a)], v[~df["PID"].isin(pids_a)]
+
+    # ------------------------------------------------------------ ESQ-R
+    scales = ([("Overall (25 items)", "Overall",
+                list(range(1, N_ESQR_ITEMS + 1)))]
+              + [(name, short, items) for (name, items), short in zip(
+                  ESQR_SUBSCALES.items(),
+                  ["Plan\\\\mgmt.", "Time\\\\mgmt.", "Materials\\\\org.",
+                   "Emotional\\\\reg.", "Behavioral\\\\reg."])])
+    esq_rows, esq_cols, pass_lal, pass_mid = [], [], [], []
+    for name, short, items in scales:
+        ma = mean_items(pre_a, "PRE_ESQR_", items, scale_max=3)
+        mc = mean_items(pre_c, "PRE_ESQR_", items, scale_max=3)
+        u, p = _mwu_cells(ma, mc)
+        esq_rows.append(f"{esc(name)} & {ma.mean():.2f} ({ma.std(ddof=1):.2f})"
+                        f" & {mc.mean():.2f} ({mc.std(ddof=1):.2f}) & {u} & "
+                        f"{p} \\\\")
+        esq_cols.append((short, [(ADHD_COLOR, ma), (CTRL_COLOR, mc)]))
+        if name != scales[0][0]:
+            if ma.mean() > 1.125:
+                pass_lal.append(name)
+            if ma.mean() > 1.5:
+                pass_mid.append(name)
+    out.append("\\subsection*{ESQ-R — executive skills (pre-study)}\n"
+               "\\noindent{\\small Coded 0--3 (official 4-point response "
+               "scale). Lalwani et al.'s ``above 2.5 on a 1--5 scale'' "
+               "criterion maps linearly to $> 1.125$ on 0--3; the scale "
+               "midpoint is 1.5 (2.5 is not the 1--5 midpoint). ADHD-group "
+               "subscale means above the Lalwani criterion: "
+               + (esc("; ".join(pass_lal)) or "none")
+               + ". Above the midpoint: "
+               + (esc("; ".join(pass_mid)) or "none")
+               + ". Group comparisons: Mann-Whitney U, six uncorrected "
+               "tests.}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrrr}
+\\toprule
+Scale & ADHD & Control & $U$ & $p$ \\\\
+ & \\multicolumn{2}{c}{mean (SD)} & & \\\\
+\\midrule
+""" + "\n".join(esq_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+    out.append("\\begin{center}\n"
+               + _box_chart(esq_cols, ylabel="ESQ-R mean item score (0--3)",
+                            width="0.85\\textwidth", ymax=3,
+                            reflines=[(1.125, "Lalwani criterion"),
+                                      (1.5, "scale midpoint")])
+               + "\n\\end{center}\n"
+               "\\noindent{\\small " + legend_box + "}\\par\n")
+
+    # ------------------------------------------------------------ NARS
+    items = list(range(1, N_NARS_ITEMS + 1))
+    pre_by = pd.Series(mean_items(pre, "PRE_NARS_", items,
+                                  NARS_REVERSE_ITEMS).values,
+                       index=pre["PID"])
+    post_by = pd.Series(mean_items(post, "POST_NARS_", items,
+                                   NARS_REVERSE_ITEMS).values,
+                        index=post["PID"])
+    both = pd.concat([pre_by, post_by], axis=1,
+                     keys=["pre", "post"]).dropna()
+    w, wp, wn = _wilcoxon_cells(both["pre"], both["post"])
+    change = both["post"] - both["pre"]
+    ch_a = change[change.index.isin(pids_a)]
+    ch_c = change[~change.index.isin(pids_a)]
+    cu, cp = _mwu_cells(ch_a, ch_c)
+    nars_rows = []
+    for label, sel in (("Pre", both["pre"]), ("Post", both["post"]),
+                       ("Change (post $-$ pre)", change)):
+        sa = sel[sel.index.isin(pids_a)]
+        sc = sel[~sel.index.isin(pids_a)]
+        nars_rows.append(f"{label} & {sa.mean():.2f} ({sa.std(ddof=1):.2f}) & "
+                         f"{sc.mean():.2f} ({sc.std(ddof=1):.2f}) & "
+                         f"{sel.mean():.2f} ({sel.std(ddof=1):.2f}) \\\\")
+    out.append("\\subsection*{NARS — attitude change (pre vs post)}\n"
+               "\\noindent{\\small Mean item score over the 14 items "
+               "(1--5, items 3, 5, 6 reverse-coded; higher = more negative "
+               "attitude).}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrr}
+\\toprule
+ & ADHD & Control & Overall \\\\
+ & \\multicolumn{3}{c}{mean (SD)} \\\\
+\\midrule
+""" + "\n".join(nars_rows) + f"""
+\\bottomrule
+\\end{{tabular}}\\\\[2pt]
+{{\\footnotesize Paired Wilcoxon pre vs post (all participants): """
+               f"$W = {w}$, {wp} ($n = {wn}$). Change score ADHD vs "
+               f"control: Mann-Whitney $U = {cu}$, {cp}.}}\n"
+               "\\end{center}\n")
+    out.append("\\begin{center}\n"
+               + _paired_lines_chart(both, groups,
+                                     ylabel="NARS mean item score (1--5)")
+               + "\n\\end{center}\n"
+               "\\noindent{\\small Thin lines: individual participants; "
+               "bold lines: group medians. \\textcolor{ApxADHD}"
+               "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
+               "{\\rule{2ex}{1.2ex}} control group.}\\par\n")
+
+    # ------------------------------------------------------------ TLX
+    tlx_rows, tlx_cols = [], []
+    for dim in TLX_DIMS:
+        col = f"POST_TLX_{dim}_1"
+        r = post.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
+        c = ctrl.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
+        pair = pd.concat([r, c], axis=1, keys=["robot", "control"]).dropna()
+        w, p, n = _wilcoxon_cells(pair["robot"], pair["control"])
+        tlx_rows.append(
+            f"{dim.capitalize()} & "
+            f"{pair['robot'].mean():.1f} ({pair['robot'].std(ddof=1):.1f}) & "
+            f"{pair['control'].mean():.1f} ({pair['control'].std(ddof=1):.1f})"
+            f" & {n} & {w} & {p} \\\\")
+        tlx_cols.append((dim.capitalize(),
+                         [(COND_ROBOT_COLOR, r), (COND_CTRL_COLOR, c)]))
+    out.append("\\subsection*{NASA-TLX — workload by condition}\n"
+               "\\noindent{\\small 0--100 sliders, paired within-subject "
+               "(Wilcoxon signed-rank); six uncorrected comparisons — "
+               "apply multiple-testing caution when reporting."
+               "}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrrrr}
+\\toprule
+Dimension & Robot & Control & $n$ & $W$ & $p$ \\\\
+ & \\multicolumn{2}{c}{mean (SD)} & & & \\\\
+\\midrule
+""" + "\n".join(tlx_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+    out.append("\\begin{center}\n"
+               + _box_chart(tlx_cols, ylabel="NASA-TLX rating (0--100)",
+                            width="0.9\\textwidth", ymax=100)
+               + "\n\\end{center}\n"
+               "\\noindent{\\small " + legend_cond + "}\\par\n")
+
+    # ------------------------------------------------------------ SUS
+    sus = sus_scores(post)
+    sus_a, sus_c = by_group(post, sus)
+    su, sp = _mwu_cells(sus_a, sus_c)
+    sus_rows = []
+    for label, s in ((GROUP_ADHD, sus_a), (GROUP_CONTROL, sus_c),
+                     ("Overall", sus)):
+        s = s.dropna()
+        sus_rows.append(
+            f"{label} & {len(s)} & {s.mean():.1f} ({s.std(ddof=1):.1f}) & "
+            f"{s.median():.1f} [{s.quantile(.25):.1f}; "
+            f"{s.quantile(.75):.1f}] & {s.min():.1f}--{s.max():.1f} \\\\")
+    out.append("\\subsection*{SUS — system usability (robot condition)}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrrr}
+\\toprule
+ & $n$ & Mean (SD) & Median [$Q_1$; $Q_3$] & Range \\\\
+\\midrule
+""" + "\n".join(sus_rows) + f"""
+\\bottomrule
+\\end{{tabular}}\\\\[2pt]
+{{\\footnotesize Mann-Whitney U ADHD vs control: $U = {su}$, {sp}. """
+               "Bangor et al.'s multi-study mean is 68; Lalwani et al. "
+               "report a mean of 76 ($n = 15$).}\n\\end{center}\n")
+    out.append("\\begin{center}\n"
+               + _box_chart([("ADHD", [(ADHD_COLOR, sus_a)]),
+                             ("Control", [(CTRL_COLOR, sus_c)]),
+                             ("Overall", [("gray", sus)])],
+                            ylabel="SUS score (0--100)",
+                            width="0.5\\textwidth", ymax=100,
+                            reflines=[(68, "Bangor mean 68")])
+               + "\n\\end{center}\n"
+               "\\noindent{\\small " + legend_box + "}\\par\n")
+
+    # ------------------------------------------- use again / recommend
+    ua_rows = []
+    for col, label in (("POST_FEAT_OVERALL_2", "Would use again"),
+                       ("POST_FEAT_OVERALL_3", "Would recommend")):
+        v = to_rank(post[col], "LIKERT5")
+        a, c = by_group(post, v)
+        ua_rows.append(
+            f"{label} & {int((a >= 4).sum())}/{int(a.notna().sum())} & "
+            f"{int((c >= 4).sum())}/{int(c.notna().sum())} & "
+            f"{int((v >= 4).sum())}/{int(v.notna().sum())} \\\\")
+    out.append("\\subsection*{Would use again / recommend}\n"
+               "\\noindent{\\small Participants answering agree or strongly "
+               "agree ($\\geq 4$ on the 5-point item). Lalwani et al.\\ "
+               "report 12/15 for both. Full response distributions for "
+               "these items appear in the post-study questionnaire "
+               "charts.}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrr}
+\\toprule
+ & ADHD & Control & Overall \\\\
+\\midrule
+""" + "\n".join(ua_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+
+    # ------------------------------------------------- feature ratings
+    feat_rows = []
+    for title, prefix, n_items in FEATURE_BLOCKS:
+        feat_rows.append(f"\\multicolumn{{6}}{{l}}{{\\itshape "
+                         f"{esc(title)}}} \\\\")
+        for i in range(1, n_items + 1):
+            col = f"{prefix}{i}"
+            v = to_rank(post[col], "LIKERT5")
+            a, c = by_group(post, v)
+            u, p = _mwu_cells(a, c)
+            label = strip_stem(q_post.get(col, col))
+            if len(label) > 58:
+                label = label[:57].rstrip() + "…"
+            feat_rows.append(f"\\;Q{i}: {esc(label)} & {a.mean():.2f} & "
+                             f"{c.mean():.2f} & {v.mean():.2f} & {u} & "
+                             f"{p} \\\\")
+    out.append("\\subsection*{Feature ratings (robot condition, 1--5)}\n"
+               "\\noindent{\\small Group means with Mann-Whitney U per item "
+               "(15 uncorrected exploratory tests). The grouped-bar chart "
+               "of these means is generated separately for the results "
+               "section (generate\\_results.py).}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{p{7.6cm}rrrrr}
+\\toprule
+Item & ADHD & Control & Overall & $U$ & $p$ \\\\
+ & \\multicolumn{3}{c}{mean} & & \\\\
+\\midrule
+""" + "\n".join(feat_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+
+    # ------------------------------------------- frustration mechanism
+    mech = frustration_mechanism(post, ctrl)
+    fr_rows = []
+    for key, label in FRUSTRATION_PREDICTORS:
+        sub = mech.dropna(subset=[key, "fr_delta"])
+        if len(sub) < 3:
+            fr_rows.append(f"{esc(label)} & -- & -- & {len(sub)} \\\\")
+            continue
+        r = scistats.spearmanr(sub[key], sub["fr_delta"])
+        fr_rows.append(f"{esc(label)} & ${r.statistic:+.3f}$ & "
+                       f"{_fmt_p(r.pvalue)} & {len(sub)} \\\\")
+    out.append("\\subsection*{TLX frustration mechanism (exploratory)}\n"
+               "\\noindent{\\small Spearman correlations between "
+               "robot-session behaviour (parsed logs) and the "
+               "robot-minus-control TLX frustration delta. Seven "
+               "uncorrected exploratory tests — a single nominal hit among "
+               "them would itself require correction. Latency and "
+               "turn-based rows have $n = 16$: one participant interacted "
+               "via text only (no spoken turns)."
+               "}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lrrr}
+\\toprule
+Robot-session metric & Spearman $\\rho$ & $p$ & $n$ \\\\
+\\midrule
+""" + "\n".join(fr_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+    sc = pd.DataFrame({"x": mech.set_index("pid")["robot_min"],
+                       "y": mech.set_index("pid")["fr_delta"]})
+    out.append("\\begin{center}\n"
+               + _scatter_chart(sc, groups,
+                                xlabel="Robot talk-time (min)",
+                                ylabel="TLX frustration delta "
+                                       "(robot $-$ control)",
+                                hline=0)
+               + "\n\\end{center}\n"
+               "\\noindent{\\small The strongest (still non-significant) "
+               "of the seven correlations. Dashed line: no difference "
+               "between conditions. \\textcolor{ApxADHD}"
+               "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
+               "{\\rule{2ex}{1.2ex}} control group.}\\par\n")
+    return "\n".join(out)
+
+
+def build_session_stats(groups: dict[str, str]) -> str:
+    """Descriptive tables + boxplots from the parsed session logs."""
+    out = [header_comment(["analysis/logs/P*_csv session logs"])]
+    sdirs = session_dirs()
+    met = {(pid, cond): session_metrics(d, cond)
+           for (pid, cond), d in sdirs.items() if pid in groups}
+    n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
+    legend_box = ("\\textcolor{ApxADHD}{\\rule{2ex}{1.2ex}} ADHD "
+                  f"($n = {n_a}$), "
+                  "\\textcolor{ApxControl}{\\rule{2ex}{1.2ex}} control "
+                  f"($n = {len(groups) - n_a}$); boxes span the quartiles, "
+                  "whiskers extend to the furthest value within 1.5 IQR, "
+                  "dots are outliers.")
+
+    out.append("\\subsection*{Session metrics — robot sessions}\n")
+    out.append(_session_metrics_table(met, groups, "Robot", _ROBOT_METRICS))
+    out.append("\\begin{center}\n"
+               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[:2],
+                                ylabel="Turns", width="0.40\\textwidth")
+               + "\\hfill\n"
+               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[2:4],
+                                ylabel="Minutes", width="0.40\\textwidth")
+               + "\n\n\\vspace{0.6em}\n"
+               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[4:],
+                                ylabel="Count", width="0.55\\textwidth")
+               + "\n\\end{center}\n"
+               + "\\noindent{\\small " + legend_box + "}\\par\n")
+
+    out.append("\\subsection*{Session metrics — control sessions "
+               "(counterfactuals)}\n"
+               "\\noindent{\\small Counterfactual interventions are logged "
+               "at the moment the deployed gate logic would have fired, but "
+               "nothing is delivered. They are an upper bound on what the "
+               "robot condition would have sent: with no conversation in the "
+               "control session, the 60-second interaction cooldown is only "
+               "ever reset by a counterfactual itself, so gating is strictly "
+               "looser than in the robot condition.}\\par\\vspace{0.4em}\n")
+    out.append(_session_metrics_table(met, groups, "Control", _CTRL_METRICS))
+    out.append("\\begin{center}\n"
+               + _boxplot_panel(met, groups, "Control", _CTRL_METRICS,
+                                ylabel="Count", width="0.48\\textwidth")
+               + "\n\\end{center}\n"
+               + "\\noindent{\\small " + legend_box + "}\\par\n")
+
+    ep, spans = episode_records(groups, sdirs)
+    out.append("\\subsection*{Below-threshold episodes}\n"
+               "\\noindent{\\small An episode is at least two consecutive "
+               "polls with the monitor signal past its threshold (engagement "
+               "rolling average $< 0.80$; windowed negative share $> 0.60$). "
+               "Recovery is the time from episode start to the first poll "
+               "back at threshold; a sensing gap of more than 30 seconds or "
+               "the session end censors an episode (recovery unobserved). "
+               "Cued = an intervention (robot) or counterfactual (control) "
+               "fired during the episode. NB the cued and uncued rows must "
+               "not be compared directly: an episode only receives a cue if "
+               "it survives until the intervention gates open, so "
+               "fast-recovering episodes are uncued by construction (see the "
+               "landmark analysis below).}\\par\\vspace{0.4em}\n")
+    out.append(_episode_table(ep))
+
+    lm_rows, naive_txt = [], []
+    for sig, signame in (("eng", "Engagement"), ("emo", "Negative affect")):
+        sub = ep[(ep.sig == sig) & (ep.cond == "Robot")]
+        cued, supd = sub[sub.cued].dur.dropna(), sub[~sub.cued].dur.dropna()
+        if len(cued) and len(supd):
+            naive_txt.append(f"{signame.lower()}: delivered median "
+                             f"{cued.median():.0f}\\,s (n={len(cued)}) vs "
+                             f"suppressed {supd.median():.0f}\\,s "
+                             f"(n={len(supd)})")
+        for lm, lm_label in (("start", "cue start"), ("end", "cue-utterance end")):
+            d, m = landmark_pairs(sub, lm)
+            if len(d) < 5:
+                lm_rows.append(f"{signame} & {lm_label} & {len(d)} & -- & -- "
+                               "& -- & -- \\\\")
+                continue
+            w, p, n = _wilcoxon_cells(d, m)
+            lm_rows.append(
+                f"{signame} & {lm_label} & {n} & {d.median():.0f} & "
+                f"{m.median():.0f} & {w} & {p} \\\\")
+    out.append("\\subsection*{Recovery after a cue — within robot sessions}\n"
+               "\\noindent{\\small Risk-set matched landmark comparison: for "
+               "each cue-delivered episode, the remaining time below "
+               "threshold from the landmark is paired with the median "
+               "remaining time of the gate-suppressed episodes still "
+               "ongoing at the same elapsed time (at least three at risk), "
+               "Wilcoxon signed-rank over delivered episodes. This corrects "
+               "the immortal-time bias of the naive comparison ("
+               + "; ".join(naive_txt) +
+               "), which is length-biased and not evidence. From the "
+               "cue-start landmark the delivered side still contains the "
+               "cue utterance itself and its signal contamination; the "
+               "cue-utterance-end landmark is the fairer variant. Residual "
+               "caveats: gating follows conversation timing (not "
+               "randomised) and episodes pool across participants."
+               "}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{llrrrrr}
+\\toprule
+Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), median} & $W$ & $p$ \\\\
+ & & & delivered & matched suppressed & & \\\\
+\\midrule
+""" + "\n".join(lm_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+
+    cc_rows = []
+    dur_cols, pct_cols = [], []
+    for sig, signame, short in (("eng", "Engagement", "Engagement"),
+                                ("emo", "Negative affect", "Negative\\\\affect")):
+        sub = ep[ep.sig == sig]
+        med = (sub.dropna(subset=["dur"])
+               .groupby(["pid", "cond"]).dur.median().unstack())
+        below = (sub.assign(bt=sub.dur.fillna(sub.low_bound))
+                 .groupby(["pid", "cond"]).bt.sum().unstack()
+                 .reindex(sorted({p for p, c, s in spans if s == sig},
+                                 key=int)).fillna(0.0))
+        pct = pd.DataFrame({
+            cond: pd.Series({p: 100 * below.loc[p, cond] / spans[(p, cond, sig)]
+                             for p in below.index if (p, cond, sig) in spans})
+            for cond in ("Robot", "Control")})
+        for label, df in (("Median recovery (s), paired", med),
+                          ("\\% of observed time past threshold", pct)):
+            if not {"Robot", "Control"} <= set(df.columns):
+                cc_rows.append(f"{signame} & {label} & -- & -- & -- & -- & -- \\\\")
+                continue
+            w, p, n = _wilcoxon_cells(df["Robot"], df["Control"])
+            r_md, c_md = df["Robot"].median(), df["Control"].median()
+            cc_rows.append(f"{signame} & {label} & {r_md:.1f} & {c_md:.1f} & "
+                           f"{n} & {w} & {p} \\\\")
+        dur_cols.append((short, [
+            (COND_ROBOT_COLOR, sub[sub.cond == "Robot"].dur.dropna()),
+            (COND_CTRL_COLOR, sub[sub.cond == "Control"].dur.dropna())]))
+        pct_cols.append((short, [
+            (COND_ROBOT_COLOR, pct["Robot"]), (COND_CTRL_COLOR, pct["Control"])]))
+    out.append("\\subsection*{Cross-condition recovery and time past "
+               "threshold}\n"
+               "\\noindent{\\small Paired within-subject comparisons "
+               "(Wilcoxon signed-rank). Median recovery uses participants "
+               "with at least one uncensored episode in both sessions; "
+               "time past threshold uses all participants (censored "
+               "episodes contribute their observed lower bound)."
+               "}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{llrrrrr}
+\\toprule
+Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
+ & & \\multicolumn{2}{c}{median} & & & \\\\
+\\midrule
+""" + "\n".join(cc_rows) + """
+\\bottomrule
+\\end{tabular}
+\\end{center}
+""")
+    legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
+                   "session, \\textcolor{ApxCondControl}{\\rule{2ex}{1.2ex}} "
+                   "control session; boxes span the quartiles, whiskers "
+                   "extend to the furthest value within 1.5 IQR, dots are "
+                   "outliers.")
+    out.append("\\begin{center}\n"
+               + _box_chart(dur_cols, ylabel="Episode recovery (s)",
+                            width="0.42\\textwidth")
+               + "\\hfill\n"
+               + _box_chart(pct_cols,
+                            ylabel="\\% time past threshold",
+                            width="0.42\\textwidth")
+               + "\n\\end{center}\n"
+               "\\noindent{\\small Left: pooled uncensored episode "
+               "durations. Right: per-participant share of observed time "
+               "past threshold. " + legend_cond + "}\\par\n")
+
+    q = quiet_engagement_medians(groups, sdirs)
+    qrows = []
+    for label, s in (("Robot session (all samples)", q["robot_all"]),
+                     ("Robot session (quiet samples only)", q["robot_quiet"]),
+                     ("Control session", q["control"])):
+        s = s.dropna()
+        qrows.append(f"{label} & {s.median():.3f} "
+                     f"[{s.quantile(.25):.3f}; {s.quantile(.75):.3f}] \\\\")
+    wq, pq, nq = _wilcoxon_cells(q["robot_quiet"], q["control"])
+    wa, pa, na = _wilcoxon_cells(q["robot_all"], q["control"])
+    out.append("\\subsection*{Camera comparability check}\n"
+               "\\noindent{\\small The two conditions sense engagement "
+               "through different cameras (robot head camera vs webcam at "
+               "the same position). Per-session medians of the raw "
+               "engagement score, with robot-session samples within "
+               f"{QUIET_BUFFER_S:.0f}\\,s after any speech excluded in the "
+               "quiet-only row: a robot-vs-control offset that persists "
+               "outside interaction windows would indicate an "
+               "optics/geometry artefact rather than head motion during "
+               "speech.}\\par\\vspace{0.4em}\n")
+    out.append("""\\begin{center}\\small
+\\begin{tabular}{lr}
+\\toprule
+ & Median of per-session medians [$Q_1$; $Q_3$] \\\\
+\\midrule
+""" + "\n".join(qrows) + f"""
+\\bottomrule
+\\end{{tabular}}\\\\[2pt]
+{{\\footnotesize Paired Wilcoxon, robot quiet-only vs control: """
+               f"$W = {wq}$, {pq} ($n = {nq}$); all samples vs control: "
+               f"$W = {wa}$, {pa} ($n = {na}$).}}\n\\end{{center}}\n")
+
+    replay_tbl, dur = _replay_table(groups, sdirs, met)
+    out.append("\\subsection*{Counterfactual replay sensitivity}\n"
+               "\\noindent{\\small Control-session counterfactual counts "
+               "re-computed by replaying the deployed gate logic over the "
+               "logged poll series, with each fire additionally carrying the "
+               "gating footprint of an intervention utterance "
+               f"(mean {dur:.1f}\\,s across the robot sessions): the speaking "
+               "gate is closed while it plays and the interaction cooldown "
+               "restarts at its end. The zero-length replay reproduces the "
+               "deployed control behaviour and validates the "
+               "re-implementation. Counts remain an upper bound: ordinary "
+               "conversation, the dominant intervention suppressor in the "
+               "robot sessions, has no control-condition counterpart and is "
+               "not simulated.}\\par\\vspace{0.4em}\n")
+    out.append(replay_tbl)
+    return "\n".join(out)
+
+
 def build_session_logs(groups: dict[str, str]) -> str:
     """Five full-page timeline charts from the parsed session logs."""
     out = [header_comment(["analysis/logs/P*_csv session logs"])]
@@ -1330,6 +2513,9 @@ def main():
         "apx_post_control.tex": build_post_control(ctrl, q_ctrl, groups, paths["control"]),
         "apx_post_robot.tex": build_post_robot(post, q_post, groups, paths["post"]),
         "apx_session_logs.tex": build_session_logs(groups),
+        "apx_session_stats.tex": build_session_stats(groups),
+        "apx_instrument_stats.tex": build_instrument_stats(pre, ctrl, post,
+                                                           q_post, groups),
         "apx_preamble_snippet.tex": PREAMBLE_SNIPPET,
     }
     for fname, content in outputs.items():
