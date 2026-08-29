@@ -499,6 +499,7 @@ PREAMBLE_SNIPPET = r"""% -------------------------------------------------------
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{pdflscape}
+\usepackage{colortbl}
 \usepackage{xcolor}
 \definecolor{ApxADHD}{RGB}{68,119,170}    % Tol blue
 \definecolor{ApxControl}{RGB}{204,102,17} % Tol orange (darker, prints well)
@@ -851,6 +852,134 @@ class Paginator:
         self.pos = self.rows
 
 
+def _fmt_pair(a, c, dec: int = 2) -> str:
+    """'ADHD | Control' cell: two values joined by a vertical bar."""
+    def one(v):
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "--"
+        return f"{v:.{dec}f}" if dec else f"{v:g}"
+    return f"{one(a)}\\,$|$\\,{one(c)}"
+
+
+def likert_summary_table(df, qtext, groups, prefix, n_items, title,
+                         hint=None) -> str:
+    """One row per item: per-value response counts, mean, median and SD,
+    each cell as 'ADHD | Control', plus a per-item Mann-Whitney U.
+    Replaces the per-question histogram charts (decided 29.08)."""
+    pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
+    n_a = len(pids_a)
+    n_c = len(groups) - n_a
+    items = [(i, f"{prefix}{i}") for i in range(1, n_items + 1)
+             if f"{prefix}{i}" in df.columns
+             or print(f"  WARNING: column {prefix}{i} missing — skipped.")]
+    all_obs = sorted({v for _, col in items for v in observed_values(df, col)},
+                     key=str)
+    cats = category_order(all_obs, hint)
+    codes = [v for v, _ in cats if isinstance(v, (int, float))]
+    if not codes:  # choice-text export: ranks 1..k in category order
+        codes = list(range(1, len(cats) + 1))
+    labels = [str(lbl) for _, lbl in cats]
+    scale_note = "; ".join(f"{c:g} = {esc(l)}" for c, l in zip(codes, labels)
+                           if str(c) != str(l))
+    rows = []
+    for pos, (i, col) in enumerate(items):
+        ranks = to_rank(df[col], hint)
+        a = ranks[df["PID"].isin(pids_a)].dropna()
+        c = ranks[~df["PID"].isin(pids_a)].dropna()
+        if len(a) >= 2 and len(c) >= 2:
+            u = scistats.mannwhitneyu(a, c, alternative="two-sided")
+            u_cell, p_cell = f"{u.statistic:.1f}", _fmt_p(u.pvalue)
+        else:
+            u_cell = p_cell = "--"
+        label = strip_stem(qtext.get(col, col))
+        if len(label) > 78:
+            label = label[:77].rstrip() + "…"
+        counts = " & ".join(
+            f"{int((a == v).sum())}\\,$|$\\,{int((c == v).sum())}"
+            for v in codes)
+        shade = "\\rowcolor{gray!8} " if pos % 2 == 0 else ""
+        # Fixed two-line, vertically centred item box: every row gets the
+        # same height and the value cells sit at the row's vertical middle.
+        # NB height must be em-based — \baselineskip is 0 inside table cells.
+        item_box = (f"\\parbox[c][3.1em][c]{{6.3cm}}"
+                    f"{{Q{i}: {esc(label)}}}")
+        rows.append(
+            f"{shade}{item_box} & {counts} & "
+            f"{_fmt_pair(a.mean(), c.mean())} & "
+            f"{_fmt_pair(a.median(), c.median(), dec=1)} & "
+            f"{_fmt_pair(a.std(ddof=1), c.std(ddof=1))} & "
+            f"{u_cell} & {p_cell} \\\\")
+    k = len(codes)
+    code_heads = " & ".join(f"{v:g}" for v in codes)
+    note = (f"Each cell shows ADHD ($n = {n_a}$) $|$ control ($n = {n_c}$): "
+            "response counts per value, then mean, median and SD of the "
+            f"coded responses. Mann-Whitney U per item ({len(items)} "
+            "exploratory, uncorrected tests).")
+    if scale_note:
+        note += f" Coding: {scale_note}."
+    body = "\n".join(rows)
+    return f"""\\subsection*{{{esc(title)}}}
+\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
+{{\\scriptsize
+\\setlength{{\\tabcolsep}}{{4pt}}
+\\setlength{{\\LTleft}}{{0pt}}\\setlength{{\\LTright}}{{0pt}}
+\\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}rrrrr@{{}}}}
+\\toprule
+Item & {code_heads} & Mean & Md & SD & $U$ & $p$ \\\\
+ & \\multicolumn{{{k + 3}}}{{c}}{{ADHD\\,$|$\\,control}} & & \\\\
+\\midrule
+\\endhead
+{body}
+\\bottomrule
+\\end{{longtable}}}}
+"""
+
+
+def slider_summary_table(df, qtext, groups, cols, title) -> str:
+    """0-100 slider dimensions (NASA-TLX): one row per dimension with
+    five-number summaries as 'ADHD | Control' pairs plus Mann-Whitney U."""
+    pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
+    n_a = len(pids_a)
+    n_c = len(groups) - n_a
+    rows = []
+    present = [c for c in cols if c in df.columns
+               or print(f"  WARNING: column {c} missing — skipped.")]
+    for pos, col in enumerate(present):
+        v = pd.to_numeric(df[col], errors="coerce")
+        a = v[df["PID"].isin(pids_a)].dropna()
+        c = v[~df["PID"].isin(pids_a)].dropna()
+        if len(a) >= 2 and len(c) >= 2:
+            u = scistats.mannwhitneyu(a, c, alternative="two-sided")
+            u_cell, p_cell = f"{u.statistic:.1f}", _fmt_p(u.pvalue)
+        else:
+            u_cell = p_cell = "--"
+        dim = esc(qtext.get(col, col).split(" - ")[0])
+        shade = "\\rowcolor{gray!8} " if pos % 2 == 0 else ""
+        cells = " & ".join(
+            _fmt_pair(fa, fc, dec=0) for fa, fc in (
+                (a.min(), c.min()), (a.quantile(.25), c.quantile(.25)),
+                (a.median(), c.median()), (a.quantile(.75), c.quantile(.75)),
+                (a.max(), c.max())))
+        rows.append(f"{shade}{dim} & {cells} & {u_cell} & {p_cell} \\\\")
+    note = (f"0--100 sliders. Each cell shows ADHD ($n = {n_a}$) $|$ control "
+            f"($n = {n_c}$). Mann-Whitney U per dimension "
+            f"({len(present)} exploratory, uncorrected tests).")
+    body = "\n".join(rows)
+    return f"""\\subsection*{{{esc(title)}}}
+\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
+{{\\small
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} rrrrr rr@{{}}}}
+\\toprule
+Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $U$ & $p$ \\\\
+ & \\multicolumn{{5}}{{c}}{{ADHD\\,$|$\\,control}} & & \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular*}}}}
+\\par\\vspace{{0.6em}}
+"""
+
+
 def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
                       with_stats=False, pag: Paginator | None = None):
     """A block of question rows (text + grouped chart), optionally followed
@@ -1038,15 +1167,15 @@ def build_pre_study(pre, qtext, groups, src):
 
     # Demographics above fill part of the page -> chart instruments start fresh.
     out.append("\\newpage\n")
-    out.append(likert_instrument(pre, qtext, groups, "PRE_NARS_", 14,
-                                 "NARS — Negative Attitudes towards Robots Scale",
-                                 hint="LIKERT5", pag=pag))
-    out.append(likert_instrument(pre, qtext, groups, "PRE_ASRS_", 18,
-                                 "ASRS v1.1 — Adult ADHD Self-Report Scale",
-                                 hint="ASRS", pag=pag))
-    out.append(likert_instrument(pre, qtext, groups, "PRE_ESQR_", 25,
-                                 "ESQ-R — Executive Skills Questionnaire (Revised)",
-                                 hint="ESQR", pag=pag))
+    out.append(likert_summary_table(pre, qtext, groups, "PRE_NARS_", 14,
+                                    "NARS — Negative Attitudes towards Robots Scale",
+                                    hint="LIKERT5"))
+    out.append(likert_summary_table(pre, qtext, groups, "PRE_ASRS_", 18,
+                                    "ASRS v1.1 — Adult ADHD Self-Report Scale",
+                                    hint="ASRS"))
+    out.append(likert_summary_table(pre, qtext, groups, "PRE_ESQR_", 25,
+                                    "ESQ-R — Executive Skills Questionnaire (Revised)",
+                                    hint="ESQR"))
     return "\n".join(out)
 
 
@@ -1057,32 +1186,31 @@ def build_post_control(ctrl, qtext, groups, src):
                                  "Task description"))
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
-    out.append(slider_instrument(ctrl, qtext, groups, tlx_cols,
-                                 "NASA-TLX (control session)", pag=pag))
+    out.append(slider_summary_table(ctrl, qtext, groups, tlx_cols,
+                                     "NASA-TLX (control session)"))
     return "\n".join(out)
 
 
 def build_post_robot(post, qtext, groups, src):
     out = [header_comment([src])]
     pag = Paginator()
-    out.append(likert_instrument(post, qtext, groups, "POST_NARS_", 14,
-                                 "NARS — Negative Attitudes towards Robots Scale",
-                                 hint="LIKERT5", pag=pag))
-    out.append(likert_instrument(post, qtext, groups, "POST_SUS_", 10,
-                                 "SUS — System Usability Scale", hint="LIKERT5", pag=pag))
+    out.append(likert_summary_table(post, qtext, groups, "POST_NARS_", 14,
+                                    "NARS — Negative Attitudes towards Robots Scale",
+                                    hint="LIKERT5"))
+    out.append(likert_summary_table(post, qtext, groups, "POST_SUS_", 10,
+                                    "SUS — System Usability Scale", hint="LIKERT5"))
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
-    out.append(slider_instrument(post, qtext, groups, tlx_cols,
-                                 "NASA-TLX (robot session)", pag=pag))
-    out.append(likert_instrument(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
-                                 "Body doubling", hint="LIKERT5", pag=pag))
-    out.append(likert_instrument(post, qtext, groups, "POST_FEAT_INATT_", 5,
-                                 "Inattention detection", hint="LIKERT5", pag=pag))
-    out.append(likert_instrument(post, qtext, groups, "POST_FEAT_CONTEXT_", 4,
-                                 "Task-aware support",
-                                 hint="LIKERT5", pag=pag))
-    out.append(likert_instrument(post, qtext, groups, "POST_FEAT_OVERALL_", 3,
-                                 "Overall experience", hint="LIKERT5", pag=pag))
+    out.append(slider_summary_table(post, qtext, groups, tlx_cols,
+                                     "NASA-TLX (robot session)"))
+    out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
+                                    "Body doubling", hint="LIKERT5"))
+    out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_INATT_", 5,
+                                    "Inattention detection", hint="LIKERT5"))
+    out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_CONTEXT_", 4,
+                                    "Task-aware support", hint="LIKERT5"))
+    out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_OVERALL_", 3,
+                                    "Overall experience", hint="LIKERT5"))
     oe_cols = [f"POST_OE_{i:02d}" for i in range(1, 13)]
     out.append(open_ended_tables(post, qtext, groups, oe_cols,
                                  "Open-ended questions"))

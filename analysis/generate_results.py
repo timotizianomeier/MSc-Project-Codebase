@@ -128,26 +128,15 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
     all_keys, all_texts, data_rows, block_spans = data
     sym = ",".join(all_keys)
     yticklabels = ",".join("{" + t + "}" for t in all_texts)
+    # ADHD group only (decided 29.08): control bars dropped from this chart.
     coords_a = " ".join(f"({a:.2f},{k})" for k, a, c in data_rows)
-    coords_c = " ".join(f"({c:.2f},{k})" for k, a, c in data_rows)
-    off = bar_pt / 2
 
-    # nodes near coords ignores the bar shift on a reversed symbolic xbar
-    # axis -> explicit value nodes at each bar's own offset (ADHD on top:
-    # Control plots first / lower).
     value_nodes = ""
     if value_labels:
-        # value_extra_pt pushes the labels slightly beyond the bar centres —
-        # needed in the compact variant where half a bar width is less than
-        # the label text's half-height.
-        v_off = off + value_extra_pt
         value_nodes = "\n    ".join(
             f"\\node[font={value_font}, inner sep=1pt, anchor=west,"
-            f" xshift=2pt, yshift={v_off:.2f}pt] "
-            f"at (axis cs:{a:.2f},{k}) {{{a:.2f}}}; "
-            f"\\node[font={value_font}, inner sep=1pt, anchor=west,"
-            f" xshift=2pt, yshift=-{v_off:.2f}pt] "
-            f"at (axis cs:{c:.2f},{k}) {{{c:.2f}}};"
+            f" xshift=2pt] "
+            f"at (axis cs:{a:.2f},{k}) {{{a:.2f}}};"
             for k, a, c in data_rows)
 
     if tick_anchors:
@@ -184,15 +173,8 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
     xtick={{1,2,3,4,5}},
     {xtick_line}
     axis x line*=bottom, axis y line*=left,
-    legend style={{font={label_font}, at={{(0.5,1.01)}}, anchor=south,
-                   draw=none, fill=none}},
-    legend columns=2,
-    legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
-    reverse legend,
   ]
-    \\addplot[xbar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};
     \\addplot[xbar, fill={ADHD_COLOR}, draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};
-    \\legend{{Control, ADHD}}
     {value_nodes}
     {span_coords}
   \\end{{axis}}
@@ -206,7 +188,7 @@ def chart_feature_means(post, qtext, groups):
     data = _feature_data(post, qtext, groups)
     return "feature_means", _render_feature_chart(
         data, axis_w="0.48\\textwidth", label_w="0.42\\textwidth",
-        pitch="0.75cm", bar_pt=5.5, label_font="\\small",
+        pitch="0.58cm", bar_pt=6.5, label_font="\\small",
         title_font="\\small\\bfseries", tick_anchors=True,
         value_labels=True)
 
@@ -219,7 +201,7 @@ def chart_feature_means_col(post, qtext, groups):
     data = _feature_data(post, qtext, groups)
     return "feature_means_col", _render_feature_chart(
         data, axis_w="0.40\\columnwidth", label_w="0.46\\columnwidth",
-        pitch="0.48cm", bar_pt=4.0, label_font="\\scriptsize",
+        pitch="0.38cm", bar_pt=4.5, label_font="\\scriptsize",
         title_font="\\scriptsize\\bfseries", tick_anchors=False,
         value_labels=True, value_font="\\tiny", value_extra_pt=1.6,
         xmax=5.6, span_ext="0.18cm")
