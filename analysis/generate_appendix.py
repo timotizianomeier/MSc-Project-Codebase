@@ -737,34 +737,34 @@ def category_table(df, col, groups, cats) -> str:
 
 def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
                        title: str, header: str | None = None) -> str:
-    """Two-column longtable, ADHD | Control, one answer per row with PID.
-    Column widths use \\linewidth so the table stretches on landscape pages
-    (pdflscape updates \\linewidth, not \\textwidth). Rows are paired, so a
-    long answer on one side leaves matching blank space on the other —
-    accepted trade-off after paracol proved fragile (removed 17.08)."""
-    a = answers_by_group.get(GROUP_ADHD, [])
-    c = answers_by_group.get(GROUP_CONTROL, [])
-    n = max(len(a), len(c))
-    rows = []
-    for i in range(n):
-        left = f"\\textbf{{P{esc(disp_pid(a[i][0]))}:}} {esc(a[i][1])}" if i < len(a) else ""
-        right = f"\\textbf{{P{esc(disp_pid(c[i][0]))}:}} {esc(c[i][1])}" if i < len(c) else ""
-        rows.append(f"{left} & {right} \\\\[6pt]")
-    body = "\n".join(rows)
-    # Inline heading: bold short header; italic question on the SAME line.
+    """Stacked full-width layout (decided 30.08): the ADHD block first,
+    then the control block below it, each a plain flowing stream of
+    answers with uniform 5pt spacing. Ordinary page breaking applies
+    everywhere, so this needs no minipages, no paracol and no height
+    estimation (all earlier two-column variants retired). Group identity
+    comes from the chart colour chips; blocks never waste space on
+    cross-column height matching."""
+    def block(items: list[tuple[str, str]], color: str, gname: str) -> str:
+        body = "\n\\par\\vspace{5pt}\\noindent\n".join(
+            f"\\textbf{{P{esc(disp_pid(pid))}:}} {esc(text)}"
+            for pid, text in items) or "---"
+        return (f"\\noindent\\textcolor{{{color}}}{{\\rule{{1.2ex}}{{1.2ex}}}}"
+                f"~\\textbf{{{gname}}}\\par\\nopagebreak\\vspace{{4pt}}"
+                f"\\noindent\n{body}")
+
     head = (f"\\textbf{{{esc(header)}}}; \\textit{{{esc(title)}}}" if header
             else f"\\textit{{{esc(title)}}}")
+    a = block(answers_by_group.get(GROUP_ADHD, []), ADHD_COLOR, "ADHD")
+    c = block(answers_by_group.get(GROUP_CONTROL, []), CTRL_COLOR, "Control")
     return f"""\\noindent{head}\\par\\nopagebreak\\vspace{{0.3em}}
 {{\\small
-\\begin{{longtable}}{{p{{0.47\\linewidth}} p{{0.47\\linewidth}}}}
-\\toprule
-\\textbf{{ADHD}} & \\textbf{{Control}} \\\\
-\\midrule
-\\endhead
-{body}
-\\bottomrule
-\\end{{longtable}}}}
-\\vspace{{0.3em}}
+\\noindent\\rule{{\\linewidth}}{{0.6pt}}\\par\\nopagebreak\\vspace{{6pt}}
+{a}
+\\par\\vspace{{10pt}}
+{c}
+\\par\\nopagebreak\\vspace{{5pt}}
+\\noindent\\rule{{\\linewidth}}{{0.4pt}}}}
+\\par\\vspace{{1.0em}}
 """
 
 
@@ -1067,15 +1067,12 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False,
 
 
 def open_ended_tables(df, qtext, groups, cols, title):
-    """Open-ended sections render in LANDSCAPE (pdflscape): the two-column
-    verbatim-answer tables use the page's long edge, which long prose needs.
-    Inside the landscape environment \\linewidth is the landscape width
-    (\\textwidth is NOT updated by pdflscape), so the answer tables size
-    their columns with \\linewidth to stretch automatically. Each question gets a
-    short bold subheader from OE_HEADERS (skipped if it would just repeat
-    the section title), with the full question text below it."""
-    parts = ["\\begin{landscape}\n"
-             f"\\subsection*{{{esc(title)}}}\n"]
+    """Open-ended sections in ordinary PORTRAIT flow (landscape retired
+    30.08 with the stacked full-width layout — see text_answers_table).
+    Each question gets a short bold subheader from OE_HEADERS (skipped if
+    it would just repeat the section title), with the full question text
+    below it."""
+    parts = [f"\\subsection*{{{esc(title)}}}\n"]
     wrote_any = False
     for col in cols:
         if col not in df.columns:
@@ -1096,7 +1093,6 @@ def open_ended_tables(df, qtext, groups, cols, title):
         wrote_any = True
     if not wrote_any:
         return ""
-    parts.append("\\end{landscape}\n")
     return "\n".join(parts)
 
 
