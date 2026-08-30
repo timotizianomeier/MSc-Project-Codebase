@@ -137,6 +137,9 @@ def main() -> None:
                   f"midpoint: {mid}")
             print(f"    {'':24s} Control mean={mc.mean():.2f} (0-3) "
                   f"[1-5: {mc.mean()*4/3+1:.2f}]")
+            mo = _mean_items(pre, "PRE_ESQR_", items, scale_max=3)
+            print(f"    {'':24s} Overall mean={mo.mean():.2f} (0-3) "
+                  f"[1-5: {mo.mean()*4/3+1:.2f}]")
             _mwu(ma, mc, name)
     else:
         print("    !! ESQR_SUBSCALES not configured — per-subscale check")
@@ -162,11 +165,13 @@ def main() -> None:
     pre_by = pre.set_index("PID").assign(v=pre_nars.values)["v"]
     post_by = post.set_index("PID").assign(v=post_nars.values)["v"]
     both = pd.concat([pre_by, post_by], axis=1, keys=["pre", "post"]).dropna()
-    print(f"    pre  mean item score: {_desc(both['pre'])}")
-    print(f"    post mean item score: {_desc(both['post'])}")
-    _paired_tests(both["pre"], both["post"], "pre", "post")
     ga = both[both.index.isin(pids_a)]
     gc = both[~both.index.isin(pids_a)]
+    for gname, sub in (("Overall", both), ("ADHD", ga), ("Control", gc)):
+        print(f"  {gname}")
+        print(f"    pre  mean item score: {_desc(sub['pre'])}")
+        print(f"    post mean item score: {_desc(sub['post'])}")
+        _paired_tests(sub["pre"], sub["post"], "pre", "post")
     _mwu(ga["post"] - ga["pre"], gc["post"] - gc["pre"], "NARS change score")
 
     # ------------------------------------------------- 3. TLX by condition
@@ -177,9 +182,15 @@ def main() -> None:
         r = post.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         c = ctrl.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         both = pd.concat([r, c], axis=1, keys=["robot", "control"]).dropna()
-        print(f"  {dim.capitalize():12s} robot {both['robot'].mean():5.1f} "
-              f"vs control {both['control'].mean():5.1f}")
-        _paired_tests(both["robot"], both["control"], "robot", "control")
+        ba = both[both.index.isin(pids_a)]
+        bc = both[~both.index.isin(pids_a)]
+        print(f"  {dim.capitalize()}")
+        for gname, sub in (("Overall", both), ("ADHD", ba), ("Control", bc)):
+            print(f"    {gname:8s} robot {sub['robot'].mean():5.1f} "
+                  f"vs control {sub['control'].mean():5.1f}")
+            _paired_tests(sub["robot"], sub["control"], "robot", "control")
+        _mwu(ba["robot"] - ba["control"], bc["robot"] - bc["control"],
+             f"{dim} robot-minus-control delta")
 
     # --------------------------------------------------------------- 4. SUS
     print("\n[4] SUS (robot condition)")
@@ -222,13 +233,21 @@ def main() -> None:
     print("    treat every p as exploratory/uncorrected (a 'significant' hit")
     print("    among this many tests would itself need correction).")
     mech = frustration_mechanism(post, ctrl)
+    mech["group"] = mech["pid"].map(groups)
     print(mech.round(2).sort_values("fr_delta", ascending=False)
           .to_string(index=False))
     for x, label in FRUSTRATION_PREDICTORS:
-        sub = mech.dropna(subset=[x])
-        r = stats.spearmanr(sub[x], sub["fr_delta"])
-        print(f"    Spearman {label} vs frustration delta "
-              f"(n={len(sub)}): rho={r.statistic:+.3f}, p={r.pvalue:.3f}")
+        for gname, msub in (("Overall", mech),
+                            ("ADHD", mech[mech["group"] == GROUP_ADHD]),
+                            ("Control", mech[mech["group"] == GROUP_CONTROL])):
+            sub = msub.dropna(subset=[x])
+            if len(sub) < 4:
+                print(f"    Spearman {label} vs frustration delta [{gname}]: "
+                      f"n={len(sub)} — too few")
+                continue
+            r = stats.spearmanr(sub[x], sub["fr_delta"])
+            print(f"    Spearman {label} vs frustration delta [{gname}] "
+                  f"(n={len(sub)}): rho={r.statistic:+.3f}, p={r.pvalue:.3f}")
 
     # ------------------------------------- 8. session-log descriptives
     print("\n[8] Session-log descriptives per condition and group")
@@ -260,8 +279,11 @@ def main() -> None:
             c = s[[p for p in pids if groups[p] == GROUP_CONTROL]]
             print(f"    {label:<25} median {s.median():6.1f} "
                   f"[{s.quantile(.25):.1f}; {s.quantile(.75):.1f}]  "
-                  f"SD {s.std(ddof=1):5.1f}  range {s.min():.0f}-{s.max():.0f}  "
-                  f"| ADHD md {a.median():.1f} / Ctrl md {c.median():.1f}")
+                  f"SD {s.std(ddof=1):5.1f}  range {s.min():.0f}-{s.max():.0f}")
+            print(f"    {'':<25} ADHD md {a.median():.1f} "
+                  f"[{a.quantile(.25):.1f}; {a.quantile(.75):.1f}] | "
+                  f"Ctrl md {c.median():.1f} "
+                  f"[{c.quantile(.25):.1f}; {c.quantile(.75):.1f}]")
             _mwu(a, c, label)
 
     # ------------------------------------- 9. episodes & recovery
@@ -272,19 +294,32 @@ def main() -> None:
     print("    first back-at-threshold poll. Sensing gaps >30 s or session")
     print("    end censor an episode (recovery unobserved).")
     ep, spans = episode_records(groups, sdirs)
+    ep["group"] = ep.pid.map(groups)
 
     print("\n[9a] Episode inventory")
     for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
         for cond in ("Robot", "Control"):
             sub = ep[(ep.sig == sig) & (ep.cond == cond)]
-            obs = sub.dur.dropna()
-            line = (f"  {signame:<10} {cond:<7} episodes={len(sub)} "
-                    f"(censored {int(sub.censored.sum())}, "
-                    f"cued {int(sub.cued.sum())})")
-            if len(obs):
-                line += (f"  recovery median {obs.median():.0f}s "
-                         f"[{obs.quantile(.25):.0f}; {obs.quantile(.75):.0f}]")
-            print(line)
+            for gname, g in (("Overall", sub),
+                             ("ADHD", sub[sub.group == GROUP_ADHD]),
+                             ("Control", sub[sub.group == GROUP_CONTROL])):
+                obs = g.dur.dropna()
+                line = (f"  {signame:<10} {cond:<7} [{gname:<7}] "
+                        f"episodes={len(g)} "
+                        f"(censored {int(g.censored.sum())}, "
+                        f"cued {int(g.cued.sum())})")
+                if len(obs):
+                    line += (f"  recovery median {obs.median():.0f}s "
+                             f"[{obs.quantile(.25):.0f}; "
+                             f"{obs.quantile(.75):.0f}]")
+                print(line)
+            spids = sorted((p for p, c in sdirs if c == cond and p in groups),
+                           key=int)
+            cnt = (sub.groupby("pid").size()
+                   .reindex(spids, fill_value=0).astype(float))
+            _mwu(cnt[[p for p in spids if groups[p] == GROUP_ADHD]],
+                 cnt[[p for p in spids if groups[p] == GROUP_CONTROL]],
+                 f"{signame} {cond} episodes per participant")
 
     print("\n[9b] Within-robot: cue delivered vs gate-suppressed episodes")
     print("     WARNING immortal-time bias: an episode only receives a cue")
@@ -299,36 +334,42 @@ def main() -> None:
     print("     conversation timing (not randomised) and episodes pool")
     print("     across participants (clustering unmodelled).")
     for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
-        sub = ep[(ep.sig == sig) & (ep.cond == "Robot")]
-        cued, sup = sub[sub.cued].dur.dropna(), sub[~sub.cued].dur.dropna()
-        if not (len(cued) and len(sup)):
-            print(f"  {signame}: too few episodes")
-            continue
-        print(f"  {signame}: delivered n={len(cued)} median {cued.median():.0f}s"
-              f" | suppressed n={len(sup)} median {sup.median():.0f}s"
-              "   [naive, length-biased]")
-        rce = sub.rec_cue_end.dropna()
-        if len(rce):
-            print(f"    recovery from cue-utterance END (delivered only, "
-                  f"n={len(rce)}): median {rce.median():.0f}s "
-                  f"[{rce.quantile(.25):.0f}; {rce.quantile(.75):.0f}]")
-        for lm, lm_label in (("start", "cue START"), ("end", "cue END  ")):
-            dvals, mvals = landmark_pairs(sub, lm)
-            if len(dvals) >= 5:
-                try:
-                    w = stats.wilcoxon(dvals, mvals)
-                    wtxt = f"W={w.statistic:.1f}, p={w.pvalue:.3f}"
-                except ValueError as exc:
-                    wtxt = f"not computable ({exc})"
-                print(f"    landmark at {lm_label} (n={len(dvals)}): remaining "
-                      f"median {dvals.median():.0f}s vs matched suppressed "
-                      f"{mvals.median():.0f}s; Wilcoxon {wtxt}")
-            else:
-                print(f"    landmark at {lm_label}: only {len(dvals)} "
-                      "matchable delivered episodes — too few to test")
-        print("    NOTE if the two landmarks disagree in direction, the")
-        print("    within-robot contrast is not robust — report the")
-        print("    after-cue-end recovery descriptively instead.")
+        sub_all = ep[(ep.sig == sig) & (ep.cond == "Robot")]
+        for gname, sub in (("Overall", sub_all),
+                           ("ADHD", sub_all[sub_all.group == GROUP_ADHD]),
+                           ("Control", sub_all[sub_all.group == GROUP_CONTROL])):
+            cued = sub[sub.cued].dur.dropna()
+            sup = sub[~sub.cued].dur.dropna()
+            if not (len(cued) and len(sup)):
+                print(f"  {signame} [{gname}]: too few episodes")
+                continue
+            print(f"  {signame} [{gname}]: delivered n={len(cued)} "
+                  f"median {cued.median():.0f}s"
+                  f" | suppressed n={len(sup)} median {sup.median():.0f}s"
+                  "   [naive, length-biased]")
+            rce = sub.rec_cue_end.dropna()
+            if len(rce):
+                print(f"    recovery from cue-utterance END (delivered only, "
+                      f"n={len(rce)}): median {rce.median():.0f}s "
+                      f"[{rce.quantile(.25):.0f}; {rce.quantile(.75):.0f}]")
+            for lm, lm_label in (("start", "cue START"), ("end", "cue END  ")):
+                dvals, mvals = landmark_pairs(sub, lm)
+                if len(dvals) >= 5:
+                    try:
+                        w = stats.wilcoxon(dvals, mvals)
+                        wtxt = f"W={w.statistic:.1f}, p={w.pvalue:.3f}"
+                    except ValueError as exc:
+                        wtxt = f"not computable ({exc})"
+                    print(f"    landmark at {lm_label} (n={len(dvals)}): "
+                          f"remaining median {dvals.median():.0f}s vs matched "
+                          f"suppressed {mvals.median():.0f}s; Wilcoxon {wtxt}")
+                else:
+                    print(f"    landmark at {lm_label}: only {len(dvals)} "
+                          "matchable delivered episodes — too few to test")
+    print("    NOTE if the two landmarks disagree in direction, the")
+    print("    within-robot contrast is not robust — report the")
+    print("    after-cue-end recovery descriptively instead. Group-level")
+    print("    landmark matching draws the risk set from that group only.")
 
     print("\n[9c] Cross-condition (paired per participant; camera caveat")
     print("     applies unless [9d] clears it)")
@@ -342,15 +383,23 @@ def main() -> None:
             cond: pd.Series({p: 100 * below.loc[p, cond] / spans[(p, cond, sig)]
                              for p in below.index if (p, cond, sig) in spans})
             for cond in ("Robot", "Control")})
-        print(f"  {signame} — median recovery (s), participants with episodes "
-              f"in both conditions:")
-        if {"Robot", "Control"} <= set(med.columns):
-            _paired_tests(med["Robot"], med["Control"], "Robot", "Control")
-        print(f"  {signame} — % of observed time past threshold "
-              f"(all {len(pct)} participants):")
-        print(f"    Robot md {pct['Robot'].median():.1f}% / "
-              f"Control md {pct['Control'].median():.1f}%")
-        _paired_tests(pct["Robot"], pct["Control"], "Robot", "Control")
+        for gname in ("Overall", "ADHD", "Control"):
+            if gname == "Overall":
+                gmed, gpct = med, pct
+            else:
+                gpids = [p for p, g in groups.items() if g == gname]
+                gmed = med[med.index.isin(gpids)]
+                gpct = pct[pct.index.isin(gpids)]
+            print(f"  {signame} [{gname}] — median recovery (s), participants "
+                  f"with episodes in both conditions:")
+            if {"Robot", "Control"} <= set(gmed.columns):
+                _paired_tests(gmed["Robot"], gmed["Control"],
+                              "Robot", "Control")
+            print(f"  {signame} [{gname}] — % of observed time past threshold "
+                  f"({len(gpct)} participants):")
+            print(f"    Robot md {gpct['Robot'].median():.1f}% / "
+                  f"Control md {gpct['Control'].median():.1f}%")
+            _paired_tests(gpct["Robot"], gpct["Control"], "Robot", "Control")
 
     print("\n[9d] Camera check — raw engagement medians outside interaction")
     print(f"     windows (samples within {QUIET_BUFFER_S:.0f}s after any speech")
@@ -358,14 +407,19 @@ def main() -> None:
     print("     robot-vs-control offset persists here, it is optics/geometry,")
     print("     not head motion during speech.")
     q = quiet_engagement_medians(groups, sdirs)
-    print(f"    Robot all-samples median of medians {q['robot_all'].median():.3f} | "
-          f"Robot quiet-only {q['robot_quiet'].median():.3f} "
-          f"(median {q['n_quiet'].median():.0f} quiet samples/session) | "
-          f"Control {q['control'].median():.3f}")
-    print("    Robot QUIET vs Control (the fair comparison):")
-    _paired_tests(q["robot_quiet"], q["control"], "Robot-quiet", "Control")
-    print("    Robot ALL vs Control (reference):")
-    _paired_tests(q["robot_all"], q["control"], "Robot-all", "Control")
+    for gname in ("Overall", GROUP_ADHD, GROUP_CONTROL):
+        gq = q if gname == "Overall" else q[q.index.map(groups.get) == gname]
+        print(f"  [{gname}]")
+        print(f"    Robot all-samples median of medians "
+              f"{gq['robot_all'].median():.3f} | "
+              f"Robot quiet-only {gq['robot_quiet'].median():.3f} "
+              f"(median {gq['n_quiet'].median():.0f} quiet samples/session) | "
+              f"Control {gq['control'].median():.3f}")
+        print("    Robot QUIET vs Control (the fair comparison):")
+        _paired_tests(gq["robot_quiet"], gq["control"],
+                      "Robot-quiet", "Control")
+        print("    Robot ALL vs Control (reference):")
+        _paired_tests(gq["robot_all"], gq["control"], "Robot-all", "Control")
 
     print("\n[9e] Replay sensitivity — control counterfactuals with each")
     print("     fire carrying an intervention utterance's gating footprint")
@@ -377,18 +431,20 @@ def main() -> None:
     print(f"    intervention utterance length (robot sessions, n={len(idurs)}): "
           f"mean {idurs.mean():.1f}s, median {idurs.median():.1f}s")
     dur = float(idurs.mean())
-    tot_log = tot_r0 = tot_rd = 0
-    print("    pid  logged  replay(0s)  replay(utterance)")
+    tot = {g: [0, 0, 0] for g in ("Overall", GROUP_ADHD, GROUP_CONTROL)}
+    print("    pid  group    logged  replay(0s)  replay(utterance)")
     for pid, cond in sorted(met, key=lambda k: int(k[0])):
         if cond != "Control":
             continue
         d = sdirs[(pid, cond)]
         logged = met[(pid, cond)]["int_tot"]
         r0, rd = _replay_counterfactuals(d, 0.0), _replay_counterfactuals(d, dur)
-        tot_log += logged; tot_r0 += r0; tot_rd += rd
-        print(f"    P{pid:<3} {logged:6d} {r0:9d} {rd:14d}")
-    print(f"    TOTAL{tot_log:6d} {tot_r0:9d} {tot_rd:14d}   "
-          "(replay(0s) validates the replay against the deployed logic)")
+        for g in ("Overall", groups[pid]):
+            tot[g][0] += logged; tot[g][1] += r0; tot[g][2] += rd
+        print(f"    P{pid:<3} {groups[pid]:<8} {logged:5d} {r0:9d} {rd:14d}")
+    for g in ("Overall", GROUP_ADHD, GROUP_CONTROL):
+        print(f"    TOTAL {g:<8} {tot[g][0]:4d} {tot[g][1]:9d} {tot[g][2]:14d}")
+    print("    (replay(0s) validates the replay against the deployed logic)")
 
     print("\nDone. Carry values over manually; nothing was written anywhere.")
 
