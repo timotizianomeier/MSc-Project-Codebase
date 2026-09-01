@@ -322,8 +322,9 @@ def main() -> None:
                              f"[{obs.quantile(.25):.0f}; "
                              f"{obs.quantile(.75):.0f}]")
                 print(line)
-            spids = sorted((p for p, c in sdirs if c == cond and p in groups),
-                           key=int)
+            # Gated series are excluded, not counted as 0 episodes.
+            spids = sorted((p for p, c in sdirs if c == cond and p in groups
+                            and (p, c, sig) not in gated), key=int)
             cnt = (sub.groupby("pid").size()
                    .reindex(spids, fill_value=0).astype(float))
             _mwu(cnt[[p for p in spids if groups[p] == GROUP_ADHD]],

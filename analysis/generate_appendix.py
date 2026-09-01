@@ -1673,7 +1673,12 @@ def episode_records(groups: dict, sdirs: dict) -> tuple[pd.DataFrame, dict]:
                 continue
             polls = signal_polls(d, which)
             if len(polls) > 1:
-                spans[(pid, cond, which)] = polls[-1][0] - polls[0][0]
+                # Observed time = inter-poll gaps clamped at the censor
+                # gap, so sensing outages do not inflate the denominator
+                # of the %-time-past-threshold metric.
+                spans[(pid, cond, which)] = sum(
+                    min(t2 - t1, EPISODE_CENSOR_GAP_S)
+                    for (t1, _), (t2, _) in zip(polls, polls[1:]))
             base = "engagement" if which == "eng" else "emotion"
             kind = (f"intervention_{base}" if cond == "Robot"
                     else f"counterfactual_{base}")
@@ -1798,8 +1803,8 @@ def frustration_mechanism(post: pd.DataFrame, ctrl: pd.DataFrame) -> pd.DataFram
 
 # (key, table label, boxplot label, decimals)
 _ROBOT_METRICS = [
-    ("robot_turns", "Robot responses (incl. interventions)", "Robot\\\\resp.", 0),
-    ("user_turns", "User turns (spoken)", "User\\\\turns", 0),
+    ("robot_turns", "Robot turns", "Robot\\\\turns", 0),
+    ("user_turns", "User turns", "User\\\\turns", 0),
     ("robot_min", "Robot talk-time (min)", "Robot\\\\talk (min)", 1),
     ("user_min", "User talk-time (min)", "User\\\\talk (min)", 1),
     ("context", "Context submissions", "Context\\\\submits", 0),
@@ -2553,7 +2558,8 @@ Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), med
                "(Wilcoxon signed-rank). Median recovery uses participants "
                "with at least one uncensored episode in both sessions; "
                "time past threshold uses all participants (censored "
-               "episodes contribute their observed lower bound)."
+               "episodes contribute their observed lower bound; sensing "
+               "gaps above 30\\,s do not count as observed time)."
                "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
 \\begin{tabular}{llrrrrr}
