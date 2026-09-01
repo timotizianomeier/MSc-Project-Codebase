@@ -228,10 +228,10 @@ def chart_feature_means_col(post, qtext, groups):
 
 
 # Compact row labels for the results-section table (the appendix keeps the
-# long forms; the "(transcript events)" qualifier moves to the caption).
+# long forms; the "(incl. interventions)" qualifier moves to the caption).
 _SHORT_METRIC_LABELS = {
-    "Robot turns (transcript events)": "Robot turns",
-    "User turns (transcript events)": "User turns",
+    "Robot turns (spoken)": "Robot turns",
+    "User turns (spoken)": "User turns",
     "Engagement interventions": "Engagement interv.",
 }
 

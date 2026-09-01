@@ -34,9 +34,9 @@ from scipy import stats
 from generate_appendix import (
     ESQR_SUBSCALES, FEATURE_BLOCKS, FILE_PATTERNS, FRUSTRATION_PREDICTORS,
     GROUP_ADHD, GROUP_CONTROL, N_ESQR_ITEMS, N_NARS_ITEMS,
-    NARS_REVERSE_ITEMS, QUIET_BUFFER_S, TLX_DIMS,
+    NARS_REVERSE_ITEMS, QUIET_BUFFER_S, SIGNAL_COVERAGE_MIN, TLX_DIMS,
     assign_groups, clean, load_qualtrics, newest_file, to_rank,
-    episode_records, frustration_mechanism, landmark_pairs,
+    episode_records, frustration_mechanism, gated_signals, landmark_pairs,
     quiet_engagement_medians,
     _read_rows as _log_rows,
     session_dirs as _session_dirs,
@@ -256,10 +256,19 @@ def main() -> None:
     print("    cooldown (only counterfactual fires do), so gating is")
     print("    strictly looser than in the robot condition. See [9e].")
     sdirs = _session_dirs()
+    gated = gated_signals(sdirs)
+    if gated:
+        print(f"    Signal-coverage gate (<{SIGNAL_COVERAGE_MIN:.0%} of the "
+              "session covered by value-bearing polls) — excluded from all "
+              "signal-level analyses in [9]:")
+        for (pid, cond, sig), cov in sorted(gated.items(),
+                                            key=lambda kv: (int(kv[0][0]),
+                                                            kv[0][1])):
+            print(f"      P{pid} {cond} {sig}: {100 * cov:.1f}% coverage")
     met = {k: _session_metrics(d, k[1]) for k, d in sdirs.items() if k[0] in groups}
     metric_rows = [
-        ("robot_turns", "Robot turns (transcripts)", ("Robot",)),
-        ("user_turns", "User turns (transcripts)", ("Robot",)),
+        ("robot_turns", "Robot responses", ("Robot",)),
+        ("user_turns", "User turns (spoken)", ("Robot",)),
         ("robot_min", "Robot talk-time (min)", ("Robot",)),
         ("user_min", "User talk-time (min)", ("Robot",)),
         ("context", "Context submissions", ("Robot",)),

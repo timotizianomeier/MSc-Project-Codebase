@@ -17,7 +17,10 @@ Writes into OUTDIR (default: analysis/logs/<log_stem>_csv/, gitignored):
                     intervention marker in logs from before 05.08),
                     counterfactuals, context submits (with text, newlines
                     escaped as \n; 'context_forwarded' = delivery confirmation,
-                    likewise the only context marker pre-05.08), transcripts,
+                    likewise the only context marker pre-05.08), transcripts
+                    (one event per incremental handler emission — NOT one per
+                    turn; count turns via robot_response / role-change runs),
+                    robot_response (one per completed assistant response),
                     turn latencies (ms), antenna presence cues (variation name
                     where logged), ws drops
     session.json    session metadata + row counts (parse sanity summary)
@@ -268,6 +271,15 @@ def parse_log(log_path: Path, out_dir: Path) -> dict[str, object]:
             transcript = _TRANSCRIPT_RE.search(msg)
             if transcript is not None:
                 add_event(ts, f"transcript_{transcript.group('role')}", detail=transcript.group("text"))
+                continue
+
+            # One per completed assistant response (conversational replies,
+            # interventions, context acknowledgments alike). The transcript_*
+            # events above are NOT response-countable: the handler re-emits
+            # them on every incremental update (user: per ASR partial;
+            # assistant: per text chunk).
+            if "Realtime event: response.done" in msg:
+                add_event(ts, "robot_response")
                 continue
 
             if "Realtime websocket closed unexpectedly" in msg:

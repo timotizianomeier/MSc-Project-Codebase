@@ -1470,6 +1470,21 @@ def session_metrics(dirpath: str, cond: str) -> dict:
     def n(kind: str) -> int:
         return sum(1 for r in ev if r["event_type"] == kind)
 
+    # User turns = maximal runs of consecutive transcript_user events. The
+    # handler re-logs the growing user transcript on every ASR partial
+    # update (one utterance -> several transcript_user events), so raw
+    # event counts overcount by 1.2-12x per participant; run counts match
+    # the independent turn_latency event counts within +-1 in every
+    # session (verified 01.09.2026). A robot response landing mid-speech
+    # splits the run — by definition the interruption starts a new turn.
+    user_turns, prev = 0, None
+    for r in ev:
+        et = r["event_type"]
+        if et in ("transcript_user", "transcript_assistant"):
+            if et == "transcript_user" and prev != "transcript_user":
+                user_turns += 1
+            prev = et
+
     user_s = robot_s = 0.0
     for r in _read_rows(dirpath, "speech.csv"):
         if r["actor"] == "user":
@@ -1481,8 +1496,10 @@ def session_metrics(dirpath: str, cond: str) -> dict:
     emo = n("intervention_emotion_sent" if cond == "Robot"
             else "counterfactual_emotion")
     return {
-        "robot_turns": n("transcript_assistant"),
-        "user_turns": n("transcript_user"),
+        # One robot_response event per completed assistant response
+        # (conversational replies, interventions, context acks alike).
+        "robot_turns": n("robot_response"),
+        "user_turns": user_turns,
         "context": n("context_submit"),
         "robot_min": robot_s / 60, "user_min": user_s / 60,
         "int_eng": eng, "int_emo": emo, "int_tot": eng + emo,
@@ -1507,6 +1524,57 @@ def signal_polls(dirpath: str, which: str) -> list[tuple[float, bool]]:
         active = (float(val) < float(thr)) if which == "eng" else (float(val) > float(thr))
         out.append((t, active))
     return out
+
+
+SIGNAL_COVERAGE_MIN = 0.80  # per-(session, signal) validity gate
+
+
+def signal_coverage(dirpath: str, which: str) -> float:
+    """Fraction of the nominal session length covered by value-bearing
+    polls of one signal, with inter-poll gaps clamped at
+    EPISODE_CENSOR_GAP_S so sensing outages count as uncovered. Emotion
+    polls without a detected face carry no value and add no coverage, so
+    a mostly-noface session fails the gate too."""
+    polls = signal_polls(dirpath, which)
+    if len(polls) < 2:
+        return 0.0
+    cov = sum(min(t2 - t1, EPISODE_CENSOR_GAP_S)
+              for (t1, _), (t2, _) in zip(polls, polls[1:]))
+    return cov / (SESSION_MAX_MIN * 60.0)
+
+
+def gated_signals(sdirs: dict) -> dict[tuple[str, str, str], float]:
+    """(pid, cond, sig) -> coverage for every signal series FAILING the
+    SIGNAL_COVERAGE_MIN gate. These series are excluded from all
+    signal-level analyses (episodes, %-time, camera check); descriptive
+    intervention/counterfactual counts stay reported but carry a note."""
+    out = {}
+    for (pid, cond), d in sdirs.items():
+        for sig in ("eng", "emo"):
+            c = signal_coverage(d, sig)
+            if c < SIGNAL_COVERAGE_MIN:
+                out[(pid, cond, sig)] = c
+    return out
+
+
+def gate_note(groups: dict, sdirs: dict) -> str:
+    """Human-readable summary of the coverage gate for fragment notes
+    (display PIDs). Empty string if nothing is excluded."""
+    gated = gated_signals(sdirs)
+    items = [f"P{disp_pid(pid)} {cond.lower()} session "
+             f"{'engagement' if sig == 'eng' else 'negative affect'} "
+             f"({100 * cov:.0f}\\%)"
+             for (pid, cond, sig), cov in sorted(
+                 gated.items(), key=lambda kv: (int(kv[0][0]), kv[0][1]))
+             if pid in groups]
+    if not items:
+        return ""
+    return ("Signal-coverage gate: a session's signal series enters the "
+            "signal-level analyses only if its value-bearing polls cover "
+            f"at least {SIGNAL_COVERAGE_MIN * 100:.0f}\\% of the session "
+            "(inter-poll gaps above 30\\,s count as uncovered; emotion "
+            "polls without a detected face carry no value). Excluded by "
+            "this rule: " + "; ".join(items) + ".")
 
 
 def extract_episodes(polls: list[tuple[float, bool]], min_polls: int = 2) -> list[dict]:
@@ -1592,6 +1660,7 @@ def episode_records(groups: dict, sdirs: dict) -> tuple[pd.DataFrame, dict]:
     """One row per below-threshold episode across all sessions, plus the
     observed poll span (s) per (pid, cond, signal) for %-time metrics."""
     recs, spans = [], {}
+    gated = gated_signals(sdirs)
     for (pid, cond), d in sdirs.items():
         if pid not in groups:
             continue
@@ -1600,6 +1669,8 @@ def episode_records(groups: dict, sdirs: dict) -> tuple[pd.DataFrame, dict]:
                   for r in _read_rows(d, "speech.csv")
                   if r["actor"] == "robot" and r["t_start_s"]]
         for which in ("eng", "emo"):
+            if (pid, cond, which) in gated:  # coverage below the gate
+                continue
             polls = signal_polls(d, which)
             if len(polls) > 1:
                 spans[(pid, cond, which)] = polls[-1][0] - polls[0][0]
@@ -1663,8 +1734,11 @@ def quiet_engagement_medians(groups: dict, sdirs: dict) -> pd.DataFrame:
     session. Quiet = no speech by either actor within QUIET_BUFFER_S
     before the sample."""
     rows = {}
+    gated = gated_signals(sdirs)
     for (pid, cond), d in sdirs.items():
         if pid not in groups:
+            continue
+        if (pid, cond, "eng") in gated:  # coverage below the gate
             continue
         speech = [(float(r["t_start_s"]), float(r["t_end_s"]))
                   for r in _read_rows(d, "speech.csv") if r["t_start_s"]]
@@ -1724,8 +1798,8 @@ def frustration_mechanism(post: pd.DataFrame, ctrl: pd.DataFrame) -> pd.DataFram
 
 # (key, table label, boxplot label, decimals)
 _ROBOT_METRICS = [
-    ("robot_turns", "Robot turns (transcript events)", "Robot\\\\turns", 0),
-    ("user_turns", "User turns (transcript events)", "User\\\\turns", 0),
+    ("robot_turns", "Robot responses (incl. interventions)", "Robot\\\\resp.", 0),
+    ("user_turns", "User turns (spoken)", "User\\\\turns", 0),
     ("robot_min", "Robot talk-time (min)", "Robot\\\\talk (min)", 1),
     ("user_min", "User talk-time (min)", "User\\\\talk (min)", 1),
     ("context", "Context submissions", "Context\\\\submits", 0),
@@ -2323,6 +2397,10 @@ def build_session_stats(groups: dict[str, str]) -> str:
     """Descriptive tables + boxplots from the parsed session logs."""
     out = [header_comment(["analysis/logs/P*_csv session logs"])]
     sdirs = session_dirs()
+    gn = gate_note(groups, sdirs)
+    if gn:
+        out.append("\\noindent{\\small\\itshape " + gn +
+                   "}\\par\\vspace{0.6em}\n")
     met = {(pid, cond): session_metrics(d, cond)
            for (pid, cond), d in sdirs.items() if pid in groups}
     n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
@@ -2333,7 +2411,15 @@ def build_session_stats(groups: dict[str, str]) -> str:
                   "whiskers extend to the furthest value within 1.5 IQR, "
                   "dots are outliers.")
 
-    out.append("\\subsection*{Session metrics — robot sessions}\n")
+    out.append("\\subsection*{Session metrics — robot sessions}\n"
+               "\\noindent{\\small Robot responses = completed assistant "
+               "responses (one per realtime response, including "
+               "intervention utterances and context acknowledgments). "
+               "User turns = maximal runs of consecutive user-transcript "
+               "events; a robot response landing mid-speech starts a new "
+               "user turn. Raw transcript-event counts are NOT turns: the "
+               "app re-logs the growing transcript on every incremental "
+               "update.}\\par\\vspace{0.4em}\n")
     out.append(_session_metrics_table(met, groups, "Robot", _ROBOT_METRICS))
     out.append("\\begin{center}\n"
                + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[:2],
@@ -2355,7 +2441,10 @@ def build_session_stats(groups: dict[str, str]) -> str:
                "robot condition would have sent: with no conversation in the "
                "control session, the 60-second interaction cooldown is only "
                "ever reset by a counterfactual itself, so gating is strictly "
-               "looser than in the robot condition.}\\par\\vspace{0.4em}\n")
+               "looser than in the robot condition. For signal series "
+               "failing the coverage gate (note at the top of this "
+               "section), the logged counts are additionally deflated by "
+               "the sensing outages themselves.}\\par\\vspace{0.4em}\n")
     out.append(_session_metrics_table(met, groups, "Control", _CTRL_METRICS))
     out.append("\\begin{center}\n"
                + _boxplot_panel(met, groups, "Control", _CTRL_METRICS,
@@ -2376,7 +2465,10 @@ def build_session_stats(groups: dict[str, str]) -> str:
                "not be compared directly: an episode only receives a cue if "
                "it survives until the intervention gates open, so "
                "fast-recovering episodes are uncued by construction (see the "
-               "landmark analysis below).}\\par\\vspace{0.4em}\n")
+               "landmark analysis below). Signal series failing the "
+               "coverage gate (note at the top of this section) are "
+               "excluded here and in all analyses below."
+               "}\\par\\vspace{0.4em}\n")
     out.append(_episode_table(ep))
 
     lm_rows, naive_txt = [], []
@@ -2510,7 +2602,9 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
                "quiet-only row: a robot-vs-control offset that persists "
                "outside interaction windows would indicate an "
                "optics/geometry artefact rather than head motion during "
-               "speech.}\\par\\vspace{0.4em}\n")
+               "speech. Engagement series failing the coverage gate (note "
+               "at the top of this section) are excluded."
+               "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lr}
 \\toprule
@@ -2544,6 +2638,12 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
 def build_session_logs(groups: dict[str, str]) -> str:
     """Five full-page timeline charts from the parsed session logs."""
     out = [header_comment(["analysis/logs/P*_csv session logs"])]
+    gn = gate_note(groups, session_dirs())
+    if gn:
+        out.append("\\noindent{\\small\\itshape " + gn + " The timeline "
+                   "rows below still show all logged raw data (outages "
+                   "appear as line gaps); the exclusion applies to the "
+                   "statistical analyses.}\\par\\vspace{0.6em}\n")
 
     def sub(title: str, note: str, chart: str, last: bool = False) -> None:
         out.append(f"\\subsection*{{{esc(title)}}}\n"
