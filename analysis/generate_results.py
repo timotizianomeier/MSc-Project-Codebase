@@ -24,6 +24,7 @@ generate_appendix.py — the two scripts can never disagree about the data.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -247,18 +248,70 @@ def _fmt_v(v, dec: int) -> str:
     return f"{v:.{dec}f}" if dec else f"{v:g}"
 
 
+# --- siunitx S-column machinery (decided 02.09): every numeric column in
+# the session-metrics table family is an S column, so values align on the
+# decimal point and the number block centres under its header. Requires
+# \usepackage{siunitx} in the target preamble. Non-numeric cells (p-value
+# specials, '--') and text headers over S columns must be braced.
+
+_NUM_RE = re.compile(r"-?(\d+\.?\d*|\.\d+)")
+
+
+def _scell(v: str) -> str:
+    """Cell content for an S column: bare numbers pass, all else braced."""
+    v = v.strip()
+    return v if _NUM_RE.fullmatch(v) else "{" + v + "}"
+
+
+def _pcell(p: str) -> str:
+    """p-value cell for an S column (input from _mwu/_wilcoxon cells)."""
+    p = (p.replace("p = ", "").replace("p < ", "< ")
+         .replace("$", "").strip())
+    if p.startswith("<"):
+        return "{$" + p.replace(" ", "") + "$}"
+    return _scell(p)
+
+
+def _sspecs(matrix: list[list[str]]) -> list[str]:
+    """Per-column S[table-format=...] specs from formatted cell strings
+    (matrix is row-major, label column excluded)."""
+    specs = []
+    for col in zip(*matrix):
+        ip, dp, sign = 1, 0, ""
+        for v in col:
+            v = v.strip()
+            if not _NUM_RE.fullmatch(v):
+                continue
+            if v.startswith("-"):
+                sign, v = "-", v[1:]
+            i, _, d = v.partition(".")
+            ip = max(ip, len(i))
+            dp = max(dp, len(d))
+        specs.append(f"S[table-format={sign}{ip}.{dp}]")
+    return specs
+
+
+def _sheads(heads: list[str]) -> str:
+    """Header cells over S columns: brace each so it centres as text."""
+    return " & ".join("{" + h + "}" for h in heads)
+
+
 def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
     """Robot-session metrics table for the results sections: one row per
     metric, each stat an 'ADHD | Control' pair, closed by the Mann-Whitney
     p value (U dropped for space, decided 30.08). Each pair is a
     right/left sub-column duo with the bar as fixed inter-column material,
     so the separators align vertically across all rows. The thesis variant
-    carries the quartiles; the HRI variant drops Q1/Q3 to fit half a page."""
+    carries the quartiles; the HRI variant drops Q1/Q3 to fit half a page.
+    Interaction metrics only (decided 02.09): the intervention rows moved
+    to the DiD summary, which owns the inattention-specific metrics."""
     sdirs = session_dirs()
     met = {k: session_metrics(d, k[1]) for k, d in sdirs.items()
            if k[0] in groups}
     rows = []
     for key, label, _, dec in _ROBOT_METRICS:
+        if key.startswith("int_"):
+            continue
         s_a = _metric_series(met, groups, "Robot", key, GROUP_ADHD)
         s_c = _metric_series(met, groups, "Robot", key, GROUP_CONTROL)
         # min/max are observed values (metric precision); the derived
@@ -272,25 +325,29 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
             stats_.append((s_a.quantile(.75), s_c.quantile(.75), 1))
         stats_.append((s_a.max(), s_c.max(), dec))
         stats_.append((s_a.std(ddof=1), s_c.std(ddof=1), 1))
-        cells = [f"{_fmt_v(a, d)} & {_fmt_v(c, d)}" for a, c, d in stats_]
         _, p = _mwu_cells(s_a, s_c)
-        p = p.replace("p = ", "").replace("p < ", "< ")  # header says $p$
-        rows.append(f"{esc(_SHORT_METRIC_LABELS.get(label, label))} & "
-                    + " & ".join(cells) + f" & {p} \\\\")
+        rows.append([esc(_SHORT_METRIC_LABELS.get(label, label))]
+                    + [_fmt_v(x, d) for a, c, d in stats_ for x in (a, c)]
+                    + [_pcell(p)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
-    # each stat = right-aligned ADHD half + bar + left-aligned control half
+    specs = _sspecs([r[1:] for r in rows])
+    # pairs keep the bar-anchored r/l alignment (a full decimal grid
+    # across count and score rows would add ~100pt of reserved width);
+    # the p column is an S column so its values align on the point.
     pair_spec = "r@{\\,$|$\\,}l" * n_stats
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
-    body = "\n".join(rows)
+    body = "\n".join(" & ".join(_scell(c) if i else c
+                                for i, c in enumerate(r)) + " \\\\"
+                     for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}c}}
+\\begin{{tabular}}{{l{pair_spec}{specs[-1]}}}
 \\toprule
- & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} & MWU \\\\
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} & {{MWU}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 2}}}
- & {heads} & $p$ \\\\
+ & {heads} & {{$p$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -420,9 +477,9 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
         within.setdefault("both", {})[(pid, cond)] = 100.0 * (
             1 - _interval_union(intervals) / span)
 
-    for sig, label in (("eng", "Within eng.\\ threshold (\\%)"),
-                       ("emo", "Within emo.\\ threshold (\\%)"),
-                       ("both", "Within both thresholds (\\%)")):
+    for sig, label in (("eng", "Time within eng.\\ threshold (\\%)"),
+                       ("emo", "Time within emo.\\ threshold (\\%)"),
+                       ("both", "Time within both thresholds (\\%)")):
         s = pd.Series(within.get(sig, {}))
         df = (s.unstack() if len(s) else pd.DataFrame()).reindex(
             columns=["Robot", "Control"])
@@ -450,26 +507,29 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
             stats_.append((r.quantile(.75), c.quantile(.75), dd))
         stats_.append((r.max(), c.max(), dec))
         stats_.append((r.std(ddof=1), c.std(ddof=1), dd))
-        cells = [f"{_fmt_v(a, d)} & {_fmt_v(b, d)}".replace("100.0", "100")
-                 for a, b, d in stats_]
         _, p, n = _wilcoxon_cells(r, c)
-        p = p.replace("p = ", "").replace("p < ", "< ")  # header says $p$
-        body_rows.append(f"{label} & " + " & ".join(cells)
-                         + f" & {n} & {p} \\\\")
+        body_rows.append(
+            [label]
+            + [_fmt_v(x, d).replace("100.0", "100")
+               for a, b, d in stats_ for x in (a, b)]
+            + [str(n), _pcell(p)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
-    pair_spec = "r@{\\,$|$\\,}l" * n_stats
+    specs = _sspecs([r[1:] for r in body_rows])
+    pair_spec = "r@{$|$}l" * n_stats  # see robot-table note
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
-    body = "\n".join(body_rows)
+    body = "\n".join(" & ".join(_scell(c) if i else c
+                                for i, c in enumerate(r)) + " \\\\"
+                     for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}cc}}
+\\begin{{tabular}}{{l{pair_spec}{specs[-2]}{specs[-1]}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,Control}} &
    \\multicolumn{{2}}{{c}}{{Wilcoxon}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
- & {heads} & $n$ & $p$ \\\\
+ & {heads} & {{$n$}} & {{$p$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -480,7 +540,7 @@ def table_session_metrics_adhd(post, qtext, groups):
     """Thesis version: ADHD robot-vs-control, full stat spread."""
     return "session_metrics_adhd", _render_cross_table(
         groups, GROUP_ADHD, quartiles=True, size="\\footnotesize",
-        colsep="1.25pt")
+        colsep="0.3pt")
 
 
 def table_session_metrics_adhd_col(post, qtext, groups):
@@ -510,26 +570,29 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
             stats_.append((a.quantile(.75), c.quantile(.75), dd))
         stats_.append((a.max(), c.max(), dec))
         stats_.append((a.std(ddof=1), c.std(ddof=1), dd))
-        cells = [f"{_fmt_v(x, d)} & {_fmt_v(y, d)}".replace("100.0", "100")
-                 for x, y, d in stats_]
         _, p = _mwu_cells(a, c)
-        p = p.replace("p = ", "").replace("p < ", "< ")  # header says $p$
-        body_rows.append(f"{label} & " + " & ".join(cells)
-                         + f" & {len(a)}$|${len(c)} & {p} \\\\")
+        body_rows.append(
+            [label]
+            + [_fmt_v(v, d).replace("100.0", "100")
+               for x, y, d in stats_ for v in (x, y)]
+            + [f"{len(a)}$|${len(c)}", _pcell(p)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
-    pair_spec = "r@{$|$}l" * n_stats
+    specs = _sspecs([r[1:] for r in body_rows])
+    pair_spec = "r@{$|$}l" * n_stats  # see robot-table note
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
-    body = "\n".join(body_rows)
+    body = "\n".join(" & ".join(_scell(c2) if i else c2
+                                for i, c2 in enumerate(r)) + " \\\\"
+                     for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}cc}}
+\\begin{{tabular}}{{l{pair_spec}c{specs[-1]}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{{header}}} &
-   \\multicolumn{{2}}{{c}}{{Mann-Whitney}} \\\\
+   \\multicolumn{{2}}{{c}}{{MWU}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
- & {heads} & $n$ & $p$ \\\\
+ & {heads} & $n$ & {{$p$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -559,7 +622,7 @@ def table_metrics_robot_by_group(post, qtext, groups):
     return "session_metrics_robot_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Robot"), groups,
         header="ADHD\\,$|$\\,Control (robot session)", quartiles=True,
-        size="\\footnotesize", colsep="1pt")
+        size="\\footnotesize", colsep="0.25pt")
 
 
 def table_metrics_robot_by_group_col(post, qtext, groups):
@@ -575,7 +638,7 @@ def table_metrics_control_by_group(post, qtext, groups):
     return "session_metrics_control_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Control"), groups,
         header="ADHD\\,$|$\\,Control (control session)", quartiles=True,
-        size="\\footnotesize", colsep="1pt")
+        size="\\footnotesize", colsep="0.25pt")
 
 
 def table_metrics_control_by_group_col(post, qtext, groups):
@@ -592,7 +655,7 @@ def table_metrics_delta_by_group(post, qtext, groups):
     return "session_metrics_delta_by_group", _render_group_stats_table(
         _delta_rows(groups), groups,
         header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
-        quartiles=True, size="\\footnotesize", colsep="0.5pt")
+        quartiles=True, size="\\scriptsize", colsep="1.5pt")
 
 
 def table_metrics_delta_by_group_col(post, qtext, groups):
@@ -607,7 +670,7 @@ def table_session_metrics_ctrl(post, qtext, groups):
     """Thesis version: control-group robot-vs-control counterpart."""
     return "session_metrics_ctrl", _render_cross_table(
         groups, GROUP_CONTROL, quartiles=True, size="\\footnotesize",
-        colsep="1.5pt")
+        colsep="0.3pt")
 
 
 def table_session_metrics_ctrl_col(post, qtext, groups):
@@ -617,7 +680,23 @@ def table_session_metrics_ctrl_col(post, qtext, groups):
         colsep="3pt")
 
 
-def _render_did_table(groups, *, size, colsep) -> str:
+# Full labels for the full-width DiD variant (the compact HRI-col
+# variant keeps the abbreviated forms).
+_DID_FULL_LABELS = {
+    "Engagement interv.": "Engagement interventions",
+    "Emotion interv.": "Emotion interventions",
+    "All interv.": "All interventions",
+    "Mean neg.-affect share": "Mean negative-affect share",
+    "Eng.\\ episode duration (s)": "Engagement episode duration (s)",
+    "Emo.\\ episode duration (s)": "Emotion episode duration (s)",
+    "Time within eng.\\ threshold (\\%)":
+        "Time within engagement threshold (\\%)",
+    "Time within emo.\\ threshold (\\%)":
+        "Time within emotion threshold (\\%)",
+}
+
+
+def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
     """Consolidated factorial summary (layout decided 02.09, user's
     structure): per group a Robot / No-Robot mean pair plus that group's
     paired Wilcoxon p, then a Mann-Whitney block with the ADHD-vs-No-ADHD
@@ -640,28 +719,39 @@ def _render_did_table(groups, *, size, colsep) -> str:
         for s in (df["Robot"], df["Control"], delta):
             _, p_u = _mwu_cells(s[is_a], s[~is_a])
             cells.append(p_u)
-        cells = [c.replace("p = ", "").replace("p < ", "< ") for c in cells]
-        body_rows.append(f"{label} & " + " & ".join(cells) + " \\\\")
-    body = "\n".join(body_rows)
+        cells = [_pcell(c) if i in (2, 5, 6, 7, 8) else _scell(c)
+                 for i, c in enumerate(cells)]
+        if full_width:
+            label = _DID_FULL_LABELS.get(label, label)
+        body_rows.append([label] + cells)
+    specs = _sspecs([r[1:] for r in body_rows])
+    body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
+    norob = "No-Robot" if full_width else "No-rob."
+    if full_width:
+        env, env_arg = "tabular*", "{\\textwidth}"
+        colspec = ("@{}l@{\\extracolsep{\\fill}}" + "".join(specs) + "@{}")
+    else:
+        env, env_arg = "tabular", ""
+        colspec = "l" + "".join(specs)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{lrrcrrcccc}}
+\\begin{{{env}}}{env_arg}{{{colspec}}}
 \\toprule
  & \\multicolumn{{3}}{{c}}{{ADHD}} & \\multicolumn{{3}}{{c}}{{No-ADHD}} &
    \\multicolumn{{3}}{{c}}{{Mann-Whitney $p$}} \\\\
 \\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
- & Robot & No-rob. & $p_W$ & Robot & No-rob. & $p_W$
- & Robot & No-rob. & $\\Delta$ \\\\
+ & {_sheads(["Robot", norob, "$p_W$", "Robot", norob, "$p_W$",
+             "Robot", norob, "$\\Delta$"])} \\\\
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{{env}}}\\par\\endgroup"""
 
 
 def table_metrics_did(post, qtext, groups):
     """Thesis version of the consolidated factorial (DiD) summary."""
     return "session_metrics_did", _render_did_table(
-        groups, size="\\footnotesize", colsep="4pt")
+        groups, size="\\footnotesize", colsep="2pt", full_width=True)
 
 
 def table_metrics_did_col(post, qtext, groups):
@@ -692,8 +782,9 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
     rows = {label: {} for label in (
         "Engagement interv.", "Emotion interv.", "All interv.",
         "Mean engagement score", "Mean neg.-affect share",
-        "Within eng.\\ threshold (\\%)", "Within emo.\\ threshold (\\%)",
-        "Within both thresholds (\\%)")}
+        "Time within eng.\\ threshold (\\%)",
+        "Time within emo.\\ threshold (\\%)",
+        "Time within both thresholds (\\%)")}
     for (pid, cond), d in sdirs.items():
         if pid not in members:
             continue
@@ -739,8 +830,8 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
             eps[sig] = [(e["t0"],
                          e["t1"] if e["t1"] is not None else e["t_last"])
                         for e in extract_episodes(polls)]
-        for sig, label in (("eng", "Within eng.\\ threshold (\\%)"),
-                           ("emo", "Within emo.\\ threshold (\\%)")):
+        for sig, label in (("eng", "Time within eng.\\ threshold (\\%)"),
+                           ("emo", "Time within emo.\\ threshold (\\%)")):
             if sig not in segs:
                 continue
             for h, lo, hi in halves:
@@ -754,7 +845,7 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
             for h, lo, hi in halves:
                 span = _clip_len(allsegs, lo, hi)
                 if span > 0:
-                    rows["Within both thresholds (\\%)"][(pid, cond, h)] = (
+                    rows["Time within both thresholds (\\%)"][(pid, cond, h)] = (
                         100.0 * (1 - _clip_len(alleps, lo, hi) / span))
     decs = {"Mean engagement score": 2, "Mean neg.-affect share": 2,
             "Engagement interv.": 0, "Emotion interv.": 0, "All interv.": 0}
@@ -792,19 +883,21 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
         dc = ser[("Control", 2)] - ser[("Control", 1)]
         _, p, _ = _wilcoxon_cells(dr, dc)
         cells.append(p)
-        cells = [x.replace("p = ", "").replace("p < ", "< ") for x in cells]
-        body_rows.append(f"{label} & " + " & ".join(cells) + " \\\\")
-    body = "\n".join(body_rows)
+        cells = [_pcell(x) if i in (2, 5, 6, 7, 8) else _scell(x)
+                 for i, x in enumerate(cells)]
+        body_rows.append([label] + cells)
+    specs = _sspecs([r[1:] for r in body_rows])
+    body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{lrrcrrcccc}}
+\\begin{{tabular}}{{l{"".join(specs)}}}
 \\toprule
  & \\multicolumn{{3}}{{c}}{{First half}} &
    \\multicolumn{{3}}{{c}}{{Second half}} &
    \\multicolumn{{3}}{{c}}{{Wilcoxon $p$ (1st vs 2nd)}} \\\\
 \\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
- & Robot & No-rob. & $p_W$ & Robot & No-rob. & $p_W$
- & Robot & No-rob. & $\\Delta$ \\\\
+ & {_sheads(["Robot", "No-rob.", "$p_W$", "Robot", "No-rob.", "$p_W$",
+             "Robot", "No-rob.", "$\\Delta$"])} \\\\
 \\midrule
 {body}
 \\bottomrule
