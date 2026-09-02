@@ -38,8 +38,8 @@ from generate_appendix import (
     _ROBOT_METRICS, _metric_series, _mwu_cells, _wilcoxon_cells,
     _read_rows as _log_rows,
     session_dirs, session_metrics,
-    EPISODE_CENSOR_GAP_S, episode_records, extract_episodes, gated_signals,
-    signal_polls,
+    EPISODE_CENSOR_GAP_S, SESSION_MAX_MIN, episode_records,
+    extract_episodes, gated_signals, signal_polls,
 )
 
 # ============================================================================
@@ -670,6 +670,165 @@ def table_metrics_did_col(post, qtext, groups):
         groups, size="\\scriptsize", colsep="3pt")
 
 
+def _clip_len(intervals, lo: float, hi: float) -> float:
+    """Total length of the union of intervals clipped to [lo, hi]."""
+    clipped = [(max(s, lo), min(e, hi)) for s, e in intervals
+               if min(e, hi) > max(s, lo)]
+    return _interval_union(clipped)
+
+
+def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
+    """Per-(pid, cond, half) values for the vigilance-decrement tables:
+    intervention counts, mean raw signal values, and %-time within
+    thresholds, split at the nominal session midpoint (22.5 min).
+    Episodes are computed on the full session and their intervals clipped
+    to each half, so episodes straddling the midpoint contribute to both.
+    Episode-duration rows are omitted (too sparse when halved). The 80%
+    coverage gate applies per whole (session, signal), as everywhere."""
+    sdirs = session_dirs()
+    gated = gated_signals(sdirs)
+    mid, end = SESSION_MAX_MIN * 60 / 2, SESSION_MAX_MIN * 60
+    halves = ((1, 0.0, mid), (2, mid, end))
+    rows = {label: {} for label in (
+        "Engagement interv.", "Emotion interv.", "All interv.",
+        "Mean engagement score", "Mean neg.-affect share",
+        "Within eng.\\ threshold (\\%)", "Within emo.\\ threshold (\\%)",
+        "Within both thresholds (\\%)")}
+    for (pid, cond), d in sdirs.items():
+        if pid not in members:
+            continue
+        # intervention counts per half (same event kinds as session_metrics)
+        for base, label in (("engagement", "Engagement interv."),
+                            ("emotion", "Emotion interv.")):
+            kind = (f"intervention_{base}_sent" if cond == "Robot"
+                    else f"counterfactual_{base}")
+            ts = [float(r["t_session_s"]) for r in _log_rows(d, "events.csv")
+                  if r["event_type"] == kind and r["t_session_s"]]
+            for h, lo, hi in halves:
+                rows[label][(pid, cond, h)] = sum(1 for t in ts if lo <= t < hi)
+        for h, _, _ in halves:
+            rows["All interv."][(pid, cond, h)] = (
+                rows["Engagement interv."][(pid, cond, h)]
+                + rows["Emotion interv."][(pid, cond, h)])
+        # mean raw signal value per half
+        for sig, csv, col, label in (
+                ("eng", "engagement.csv", "score", "Mean engagement score"),
+                ("emo", "emotion.csv", "negative_share",
+                 "Mean neg.-affect share")):
+            if (pid, cond, sig) in gated:
+                continue
+            pts = [(float(r["t_session_s"]), float(r[col]))
+                   for r in _log_rows(d, csv)
+                   if r.get(col) and r.get("t_session_s")
+                   and float(r["t_session_s"]) >= 0]
+            for h, lo, hi in halves:
+                xs = [v for t, v in pts if lo <= t < hi]
+                if xs:
+                    rows[label][(pid, cond, h)] = sum(xs) / len(xs)
+        # %-time within thresholds per half: coverage segments (inter-poll
+        # gaps clamped at the censor gap) and episode intervals, clipped
+        eng_ok = (pid, cond, "eng") not in gated
+        emo_ok = (pid, cond, "emo") not in gated
+        segs, eps = {}, {}
+        for sig, ok in (("eng", eng_ok), ("emo", emo_ok)):
+            if not ok:
+                continue
+            polls = signal_polls(d, sig)
+            segs[sig] = [(t1, min(t2, t1 + EPISODE_CENSOR_GAP_S))
+                         for (t1, _), (t2, _) in zip(polls, polls[1:])]
+            eps[sig] = [(e["t0"],
+                         e["t1"] if e["t1"] is not None else e["t_last"])
+                        for e in extract_episodes(polls)]
+        for sig, label in (("eng", "Within eng.\\ threshold (\\%)"),
+                           ("emo", "Within emo.\\ threshold (\\%)")):
+            if sig not in segs:
+                continue
+            for h, lo, hi in halves:
+                span = _clip_len(segs[sig], lo, hi)
+                if span > 0:
+                    rows[label][(pid, cond, h)] = 100.0 * (
+                        1 - _clip_len(eps[sig], lo, hi) / span)
+        if eng_ok and emo_ok:
+            allsegs = segs["eng"] + segs["emo"]
+            alleps = eps["eng"] + eps["emo"]
+            for h, lo, hi in halves:
+                span = _clip_len(allsegs, lo, hi)
+                if span > 0:
+                    rows["Within both thresholds (\\%)"][(pid, cond, h)] = (
+                        100.0 * (1 - _clip_len(alleps, lo, hi) / span))
+    decs = {"Mean engagement score": 2, "Mean neg.-affect share": 2,
+            "Engagement interv.": 0, "Emotion interv.": 0, "All interv.": 0}
+    return [(label, vals, decs.get(label, 1))
+            for label, vals in rows.items()]
+
+
+def _render_halves_table(groups, member_group, *, size, colsep) -> str:
+    """First-half vs second-half table for one participant set: per half
+    a Robot / No-Robot mean pair with that half's paired Wilcoxon p, then
+    a Wilcoxon block testing 1st vs 2nd within each condition and on the
+    per-participant half-deltas (the half-by-condition interaction). All
+    seven tests are within-subject -> Wilcoxon signed-rank throughout
+    (Mann-Whitney would wrongly treat the halves as independent)."""
+    members = (set(groups) if member_group is None
+               else {p for p, g in groups.items() if g == member_group})
+    body_rows = []
+    for label, vals, dec in _half_split_rows(groups, members):
+        dd = max(dec, 1)
+        ser = {(c, h): pd.Series({pid: v for (pid, cc, hh), v in vals.items()
+                                  if cc == c and hh == h})
+               for c in ("Robot", "Control") for h in (1, 2)}
+        cells = []
+        for h in (1, 2):
+            r, c = ser[("Robot", h)], ser[("Control", h)]
+            cells += [_fmt_v(r.mean() if len(r) else None, dd),
+                      _fmt_v(c.mean() if len(c) else None, dd)]
+            _, p, _ = _wilcoxon_cells(r, c)
+            cells.append(p)
+        for a, b in ((ser[("Robot", 1)], ser[("Robot", 2)]),
+                     (ser[("Control", 1)], ser[("Control", 2)])):
+            _, p, _ = _wilcoxon_cells(a, b)
+            cells.append(p)
+        dr = ser[("Robot", 2)] - ser[("Robot", 1)]
+        dc = ser[("Control", 2)] - ser[("Control", 1)]
+        _, p, _ = _wilcoxon_cells(dr, dc)
+        cells.append(p)
+        cells = [x.replace("p = ", "").replace("p < ", "< ") for x in cells]
+        body_rows.append(f"{label} & " + " & ".join(cells) + " \\\\")
+    body = "\n".join(body_rows)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\begin{{tabular}}{{lrrcrrcccc}}
+\\toprule
+ & \\multicolumn{{3}}{{c}}{{First half}} &
+   \\multicolumn{{3}}{{c}}{{Second half}} &
+   \\multicolumn{{3}}{{c}}{{Wilcoxon $p$ (1st vs 2nd)}} \\\\
+\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
+ & Robot & No-rob. & $p_W$ & Robot & No-rob. & $p_W$
+ & Robot & No-rob. & $\\Delta$ \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def table_metrics_halves_adhd(post, qtext, groups):
+    """Thesis appendix: session halves, ADHD participants."""
+    return "session_metrics_halves_adhd", _render_halves_table(
+        groups, GROUP_ADHD, size="\\footnotesize", colsep="3pt")
+
+
+def table_metrics_halves_noadhd(post, qtext, groups):
+    """Thesis appendix: session halves, No-ADHD participants."""
+    return "session_metrics_halves_noadhd", _render_halves_table(
+        groups, GROUP_CONTROL, size="\\footnotesize", colsep="3pt")
+
+
+def table_metrics_halves_all(post, qtext, groups):
+    """Thesis appendix: session halves, all participants."""
+    return "session_metrics_halves_all", _render_halves_table(
+        groups, None, size="\\footnotesize", colsep="3pt")
+
+
 CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_session_metrics, table_session_metrics_col,
                   table_session_metrics_adhd, table_session_metrics_adhd_col,
@@ -680,7 +839,9 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_control_by_group_col,
                   table_metrics_delta_by_group,
                   table_metrics_delta_by_group_col,
-                  table_metrics_did, table_metrics_did_col]
+                  table_metrics_did, table_metrics_did_col,
+                  table_metrics_halves_adhd, table_metrics_halves_noadhd,
+                  table_metrics_halves_all]
 
 
 # ============================================================================
@@ -732,6 +893,8 @@ THESIS_ONLY_FRAGMENTS = {
     "session_metrics_control_by_group",
     "session_metrics_control_by_group_col",
     "session_metrics_delta_by_group", "session_metrics_delta_by_group_col",
+    "session_metrics_halves_adhd", "session_metrics_halves_noadhd",
+    "session_metrics_halves_all",
     "results_preview",
 }
 
