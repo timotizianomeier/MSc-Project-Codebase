@@ -539,8 +539,8 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
 def table_session_metrics_adhd(post, qtext, groups):
     """Thesis version: ADHD robot-vs-control, full stat spread."""
     return "session_metrics_adhd", _render_cross_table(
-        groups, GROUP_ADHD, quartiles=True, size="\\footnotesize",
-        colsep="0.3pt")
+        groups, GROUP_ADHD, quartiles=False, size="\\footnotesize",
+        colsep="3pt")
 
 
 def table_session_metrics_adhd_col(post, qtext, groups):
@@ -621,8 +621,8 @@ def table_metrics_robot_by_group(post, qtext, groups):
     """Thesis: robot-session values, ADHD vs control, MWU."""
     return "session_metrics_robot_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Robot"), groups,
-        header="ADHD\\,$|$\\,Control (robot session)", quartiles=True,
-        size="\\footnotesize", colsep="0.25pt")
+        header="ADHD\\,$|$\\,Control (robot session)", quartiles=False,
+        size="\\footnotesize", colsep="3pt")
 
 
 def table_metrics_robot_by_group_col(post, qtext, groups):
@@ -637,8 +637,8 @@ def table_metrics_control_by_group(post, qtext, groups):
     """Thesis: control-session values, ADHD vs control, MWU."""
     return "session_metrics_control_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Control"), groups,
-        header="ADHD\\,$|$\\,Control (control session)", quartiles=True,
-        size="\\footnotesize", colsep="0.25pt")
+        header="ADHD\\,$|$\\,Control (control session)", quartiles=False,
+        size="\\footnotesize", colsep="3pt")
 
 
 def table_metrics_control_by_group_col(post, qtext, groups):
@@ -655,7 +655,7 @@ def table_metrics_delta_by_group(post, qtext, groups):
     return "session_metrics_delta_by_group", _render_group_stats_table(
         _delta_rows(groups), groups,
         header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
-        quartiles=True, size="\\scriptsize", colsep="1.5pt")
+        quartiles=False, size="\\footnotesize", colsep="3pt")
 
 
 def table_metrics_delta_by_group_col(post, qtext, groups):
@@ -669,8 +669,8 @@ def table_metrics_delta_by_group_col(post, qtext, groups):
 def table_session_metrics_ctrl(post, qtext, groups):
     """Thesis version: control-group robot-vs-control counterpart."""
     return "session_metrics_ctrl", _render_cross_table(
-        groups, GROUP_CONTROL, quartiles=True, size="\\footnotesize",
-        colsep="0.3pt")
+        groups, GROUP_CONTROL, quartiles=False, size="\\footnotesize",
+        colsep="3pt")
 
 
 def table_session_metrics_ctrl_col(post, qtext, groups):
@@ -922,6 +922,72 @@ def table_metrics_halves_all(post, qtext, groups):
         groups, None, size="\\footnotesize", colsep="3pt")
 
 
+# Improvement suggestions of ADHD participants, O'Connell-style. This is
+# AUTHOR-CODED content, frozen 03.09.2026 from the ADHD open-ended
+# answers (n=12; counts are participants mentioning the suggestion at
+# least once) — it does NOT recompute from data. If new ADHD
+# participants are added, re-code by hand and update here.
+_SUGGESTIONS_N_ADHD = 12
+_SUGGESTIONS = [
+    ("Inattention detection", [
+        ("Improve detection accuracy", 3),
+        ("Add a manual override for repeated interventions", 1),
+    ]),
+    ("Interaction", [
+        ("Provide chat-style transcripts of the conversation", 2),
+        ("Reduce response latency", 1),
+    ]),
+    ("Personality", [
+        ("Give less praise", 1),
+        ("Summarise less, give more actionable advice", 1),
+        ("Ask fewer questions", 2),
+    ]),
+    ("Appearance", [
+        ("Remove the physical embodiment", 1),
+        ("Add a screen for text and diagrams", 1),
+    ]),
+    ("Structural guidance", [
+        ("Offer timer-based, regular check-ins", 2),
+        ("Track time spent on specific tasks", 1),
+    ]),
+    ("Access", [
+        ("Add internet access and multi-modal input", 1),
+    ]),
+]
+
+
+def _render_suggestions_table(*, stmt_w, size) -> str:
+    lines = []
+    for category, items in _SUGGESTIONS:
+        lines.append(f"\\multicolumn{{2}}{{@{{}}l}}{{\\textbf{{{category}}}}}"
+                     " \\\\*")
+        for stmt, n in items:
+            pct = round(100 * n / _SUGGESTIONS_N_ADHD)
+            lines.append(f"\\quad {stmt} & {n} ({pct}\\%) \\\\")
+        lines.append("\\addlinespace")
+    body = "\n".join(lines[:-1])  # drop trailing spacer
+    return f"""\\begingroup\\centering{size}
+\\begin{{tabular}}{{@{{}}p{{{stmt_w}}}r@{{}}}}
+\\toprule
+\\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def table_suggestions(post, qtext, groups):
+    """Thesis version of the ADHD improvement-suggestions table."""
+    return "improvement_suggestions", _render_suggestions_table(
+        stmt_w="0.75\\textwidth", size="\\small")
+
+
+def table_suggestions_col(post, qtext, groups):
+    """HRI column-width version."""
+    return "improvement_suggestions_col", _render_suggestions_table(
+        stmt_w="0.68\\columnwidth", size="\\footnotesize")
+
+
 CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_session_metrics, table_session_metrics_col,
                   table_session_metrics_adhd, table_session_metrics_adhd_col,
@@ -934,7 +1000,8 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_delta_by_group_col,
                   table_metrics_did, table_metrics_did_col,
                   table_metrics_halves_adhd, table_metrics_halves_noadhd,
-                  table_metrics_halves_all]
+                  table_metrics_halves_all,
+                  table_suggestions, table_suggestions_col]
 
 
 # ============================================================================
