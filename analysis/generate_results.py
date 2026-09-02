@@ -29,12 +29,17 @@ import subprocess
 import sys
 from datetime import datetime
 
+import pandas as pd
+
 from generate_appendix import (
     FILE_PATTERNS, GROUP_ADHD, GROUP_CONTROL, GROUPS_FILE,  # noqa: F401
     assign_groups, clean, esc, load_qualtrics, newest_file, strip_stem,
     to_rank,
-    _ROBOT_METRICS, _metric_series, _mwu_cells,
+    _ROBOT_METRICS, _metric_series, _mwu_cells, _wilcoxon_cells,
+    _read_rows as _log_rows,
     session_dirs, session_metrics,
+    EPISODE_CENSOR_GAP_S, episode_records, extract_episodes, gated_signals,
+    signal_polls,
 )
 
 # ============================================================================
@@ -237,6 +242,8 @@ _SHORT_METRIC_LABELS = {
 
 
 def _fmt_v(v, dec: int) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "--"
     return f"{v:.{dec}f}" if dec else f"{v:g}"
 
 
@@ -302,8 +309,378 @@ def table_session_metrics_col(post, qtext, groups):
         groups, quartiles=False, size="\\scriptsize", colsep="3pt")
 
 
+def _interval_union(intervals: list[tuple[float, float]]) -> float:
+    """Total length of the union of [start, end] intervals."""
+    total, cur0, cur1 = 0.0, None, None
+    for s0, s1 in sorted(intervals):
+        if cur1 is None or s0 > cur1:
+            if cur1 is not None:
+                total += cur1 - cur0
+            cur0, cur1 = s0, s1
+        else:
+            cur1 = max(cur1, s1)
+    if cur1 is not None:
+        total += cur1 - cur0
+    return total
+
+
+def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, int]]:
+    """Session-metric rows shared by the cross-condition, fixed-condition
+    and delta tables: intervention counts, session-mean signal values,
+    per-participant median below-threshold episode durations, and
+    %-of-observed-time within the engagement / emotion / both thresholds.
+    Each row is (label, DataFrame[Robot, Control] indexed by pid, dec) for
+    the given group (None = everyone); cells are NaN where a session or
+    signal is unavailable — callers decide whether to pair-drop. The 80%
+    signal-coverage gate applies: a gated (session, signal) blanks that
+    signal's rows and the 'both'/'any' rows for that session.
+    Episode-duration rows use observed (uncensored) episodes only."""
+    sdirs = session_dirs()
+    members = ({p for p, g in groups.items() if g == group}
+               if group else set(groups))
+    met = {k: session_metrics(d, k[1]) for k, d in sdirs.items()
+           if k[0] in members}
+    gated = gated_signals(sdirs)
+    rows = []
+    for key, label in (("int_eng", "Engagement interv."),
+                       ("int_emo", "Emotion interv."),
+                       ("int_tot", "All interv.")):
+        df = pd.DataFrame({
+            cond: _metric_series(met, groups, cond, key, group)
+            for cond in ("Robot", "Control")})
+        rows.append((label, df, 0))
+
+    # Session-mean raw signal values (engagement `score`, emotion
+    # `negative_share`), gate-respecting like every signal-level row.
+    for sig, csv, col, label in (
+            ("eng", "engagement.csv", "score", "Mean engagement score"),
+            ("emo", "emotion.csv", "negative_share",
+             "Mean neg.-affect share")):
+        vals = {}
+        for (pid, cond), d in sdirs.items():
+            if pid not in members or (pid, cond, sig) in gated:
+                continue
+            xs = [float(r[col]) for r in _log_rows(d, csv)
+                  if r.get(col) and r.get("t_session_s")
+                  and float(r["t_session_s"]) >= 0]
+            if xs:
+                vals[(pid, cond)] = sum(xs) / len(xs)
+        df = pd.Series(vals).unstack().reindex(
+            columns=["Robot", "Control"])
+        rows.append((label, df, 2))
+
+    ep, spans = episode_records(groups, sdirs)
+    ep = ep[ep.pid.isin(members)]
+
+    # Episode durations: per-participant MEDIAN duration of observed
+    # below-threshold episodes (start of detection to back-at-threshold).
+    obs = ep.dropna(subset=["dur"])
+    both_ok = {(pid, cond) for (pid, cond) in sdirs
+               if pid in members and not any(
+                   (pid, cond, s) in gated for s in ("eng", "emo"))}
+    for sig, label in (("eng", "Eng.\\ episode duration (s)"),
+                       ("emo", "Emo.\\ episode duration (s)"),
+                       ("any", "Any episode duration (s)")):
+        if sig == "any":
+            sub = obs[[(p, c) in both_ok
+                       for p, c in zip(obs.pid, obs.cond)]]
+        else:
+            sub = obs[obs.sig == sig]
+        med = sub.groupby(["pid", "cond"]).dur.median().unstack()
+        med = med.reindex(columns=["Robot", "Control"])
+        rows.append((label, med, 1))
+
+    within = {}  # sig -> {(pid, cond): % within threshold}
+    below_time = ep.assign(bt=ep.dur.fillna(ep.low_bound)).groupby(
+        ["pid", "cond", "sig"]).bt.sum()
+    for (pid, cond, sig), span in spans.items():
+        if pid not in members:
+            continue
+        bt = below_time.get((pid, cond, sig), 0.0)
+        within.setdefault(sig, {})[(pid, cond)] = 100.0 * (1 - bt / span)
+
+    # 'both' = time in no below-threshold episode of either signal, over
+    # the merged two-signal poll timeline (gaps clamped like the
+    # per-signal spans); needs both signals to pass the coverage gate.
+    for (pid, cond), d in sdirs.items():
+        if (pid, cond) not in both_ok:
+            continue
+        times, intervals = [], []
+        for sig in ("eng", "emo"):
+            polls = signal_polls(d, sig)
+            times += [t for t, _ in polls]
+            intervals += [(e["t0"],
+                           e["t1"] if e["t1"] is not None else e["t_last"])
+                          for e in extract_episodes(polls)]
+        times.sort()
+        if len(times) < 2:
+            continue
+        span = sum(min(t2 - t1, EPISODE_CENSOR_GAP_S)
+                   for t1, t2 in zip(times, times[1:]))
+        within.setdefault("both", {})[(pid, cond)] = 100.0 * (
+            1 - _interval_union(intervals) / span)
+
+    for sig, label in (("eng", "Within eng.\\ threshold (\\%)"),
+                       ("emo", "Within emo.\\ threshold (\\%)"),
+                       ("both", "Within both thresholds (\\%)")):
+        s = pd.Series(within.get(sig, {}))
+        df = (s.unstack() if len(s) else pd.DataFrame()).reindex(
+            columns=["Robot", "Control"])
+        rows.append((label, df, 1))
+    return rows
+
+
+def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
+    """One group's robot-vs-control table: interventions (control =
+    counterfactual upper bound), episode durations, and %-time within
+    thresholds, each stat a 'Robot | Control' pair, closed by the paired
+    Wilcoxon p. Same aligned-separator layout as the session-metrics
+    table."""
+    body_rows = []
+    for label, df, dec in _cross_condition_rows(groups, group):
+        df = df.dropna()  # paired design: both conditions required
+        r, c = df["Robot"], df["Control"]
+        dd = max(dec, 1)  # derived stats: >=1 decimal, more for scores
+        stats_ = [(r.min(), c.min(), dec)]
+        if quartiles:
+            stats_.append((r.quantile(.25), c.quantile(.25), dd))
+        stats_.append((r.mean(), c.mean(), dd))
+        stats_.append((r.median(), c.median(), dd))
+        if quartiles:
+            stats_.append((r.quantile(.75), c.quantile(.75), dd))
+        stats_.append((r.max(), c.max(), dec))
+        stats_.append((r.std(ddof=1), c.std(ddof=1), dd))
+        cells = [f"{_fmt_v(a, d)} & {_fmt_v(b, d)}".replace("100.0", "100")
+                 for a, b, d in stats_]
+        _, p, n = _wilcoxon_cells(r, c)
+        p = p.replace("p = ", "").replace("p < ", "< ")  # header says $p$
+        body_rows.append(f"{label} & " + " & ".join(cells)
+                         + f" & {n} & {p} \\\\")
+    stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
+                  if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
+    n_stats = len(stat_heads)
+    pair_spec = "r@{\\,$|$\\,}l" * n_stats
+    heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
+    body = "\n".join(body_rows)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\begin{{tabular}}{{l{pair_spec}cc}}
+\\toprule
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,Control}} &
+   \\multicolumn{{2}}{{c}}{{Wilcoxon}} \\\\
+\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
+ & {heads} & $n$ & $p$ \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def table_session_metrics_adhd(post, qtext, groups):
+    """Thesis version: ADHD robot-vs-control, full stat spread."""
+    return "session_metrics_adhd", _render_cross_table(
+        groups, GROUP_ADHD, quartiles=True, size="\\footnotesize",
+        colsep="1.25pt")
+
+
+def table_session_metrics_adhd_col(post, qtext, groups):
+    """HRI version: no Q1/Q3, \\scriptsize."""
+    return "session_metrics_adhd_col", _render_cross_table(
+        groups, GROUP_ADHD, quartiles=False, size="\\scriptsize",
+        colsep="3pt")
+
+
+def _render_group_stats_table(rows, groups, *, header, quartiles, size,
+                              colsep) -> str:
+    """ADHD-vs-control table over per-participant values: each stat an
+    'ADHD | Control' pair, closed by Mann-Whitney n (pair) and p. `rows`
+    is a list of (label, Series indexed by pid, dec)."""
+    body_rows = []
+    for label, s, dec in rows:
+        s = s.dropna()
+        a = s[s.index.map(groups.get) == GROUP_ADHD]
+        c = s[s.index.map(groups.get) == GROUP_CONTROL]
+        dd = max(dec, 1)
+        stats_ = [(a.min(), c.min(), dec)]
+        if quartiles:
+            stats_.append((a.quantile(.25), c.quantile(.25), dd))
+        stats_.append((a.mean(), c.mean(), dd))
+        stats_.append((a.median(), c.median(), dd))
+        if quartiles:
+            stats_.append((a.quantile(.75), c.quantile(.75), dd))
+        stats_.append((a.max(), c.max(), dec))
+        stats_.append((a.std(ddof=1), c.std(ddof=1), dd))
+        cells = [f"{_fmt_v(x, d)} & {_fmt_v(y, d)}".replace("100.0", "100")
+                 for x, y, d in stats_]
+        _, p = _mwu_cells(a, c)
+        p = p.replace("p = ", "").replace("p < ", "< ")  # header says $p$
+        body_rows.append(f"{label} & " + " & ".join(cells)
+                         + f" & {len(a)}$|${len(c)} & {p} \\\\")
+    stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
+                  if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
+    n_stats = len(stat_heads)
+    pair_spec = "r@{$|$}l" * n_stats
+    heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
+    body = "\n".join(body_rows)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\begin{{tabular}}{{l{pair_spec}cc}}
+\\toprule
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{{header}}} &
+   \\multicolumn{{2}}{{c}}{{Mann-Whitney}} \\\\
+\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
+ & {heads} & $n$ & $p$ \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def _fixed_condition_rows(groups, cond):
+    """One condition's per-participant values for every metric row."""
+    return [(label, df[cond], dec)
+            for label, df, dec in _cross_condition_rows(groups)]
+
+
+def _delta_rows(groups):
+    """Per-participant robot-minus-control deltas for every metric row.
+    Duration deltas are rounded to whole seconds for width."""
+    out = []
+    for label, df, dec in _cross_condition_rows(groups):
+        d = df["Robot"] - df["Control"]
+        if label.endswith("(s)"):
+            d, dec = d.round(0), 0
+        out.append((label, d, dec))
+    return out
+
+
+def table_metrics_robot_by_group(post, qtext, groups):
+    """Thesis: robot-session values, ADHD vs control, MWU."""
+    return "session_metrics_robot_by_group", _render_group_stats_table(
+        _fixed_condition_rows(groups, "Robot"), groups,
+        header="ADHD\\,$|$\\,Control (robot session)", quartiles=True,
+        size="\\footnotesize", colsep="1pt")
+
+
+def table_metrics_robot_by_group_col(post, qtext, groups):
+    """HRI variant of the robot-session group table."""
+    return "session_metrics_robot_by_group_col", _render_group_stats_table(
+        _fixed_condition_rows(groups, "Robot"), groups,
+        header="ADHD\\,$|$\\,Control (robot session)", quartiles=False,
+        size="\\scriptsize", colsep="3pt")
+
+
+def table_metrics_control_by_group(post, qtext, groups):
+    """Thesis: control-session values, ADHD vs control, MWU."""
+    return "session_metrics_control_by_group", _render_group_stats_table(
+        _fixed_condition_rows(groups, "Control"), groups,
+        header="ADHD\\,$|$\\,Control (control session)", quartiles=True,
+        size="\\footnotesize", colsep="1pt")
+
+
+def table_metrics_control_by_group_col(post, qtext, groups):
+    """HRI variant of the control-session group table."""
+    return "session_metrics_control_by_group_col", _render_group_stats_table(
+        _fixed_condition_rows(groups, "Control"), groups,
+        header="ADHD\\,$|$\\,Control (control session)", quartiles=False,
+        size="\\scriptsize", colsep="3pt")
+
+
+def table_metrics_delta_by_group(post, qtext, groups):
+    """Thesis: robot-minus-control deltas, ADHD vs control, MWU — the
+    nonparametric group-by-condition interaction check."""
+    return "session_metrics_delta_by_group", _render_group_stats_table(
+        _delta_rows(groups), groups,
+        header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
+        quartiles=True, size="\\footnotesize", colsep="0.5pt")
+
+
+def table_metrics_delta_by_group_col(post, qtext, groups):
+    """HRI variant of the delta table."""
+    return "session_metrics_delta_by_group_col", _render_group_stats_table(
+        _delta_rows(groups), groups,
+        header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
+        quartiles=False, size="\\scriptsize", colsep="3pt")
+
+
+def table_session_metrics_ctrl(post, qtext, groups):
+    """Thesis version: control-group robot-vs-control counterpart."""
+    return "session_metrics_ctrl", _render_cross_table(
+        groups, GROUP_CONTROL, quartiles=True, size="\\footnotesize",
+        colsep="1.5pt")
+
+
+def table_session_metrics_ctrl_col(post, qtext, groups):
+    """HRI version of the control-group table."""
+    return "session_metrics_ctrl_col", _render_cross_table(
+        groups, GROUP_CONTROL, quartiles=False, size="\\scriptsize",
+        colsep="3pt")
+
+
+def _render_did_table(groups, *, size, colsep) -> str:
+    """Consolidated factorial summary (layout decided 02.09, user's
+    structure): per group a Robot / No-Robot mean pair plus that group's
+    paired Wilcoxon p, then a Mann-Whitney block with the ADHD-vs-No-ADHD
+    p at each condition and on the robot-minus-control deltas (the
+    interaction). Nine numbers per row = the complete 2x2 report; all of
+    them also appear in the per-comparison tables. Five separate rank
+    tests, not one model — say so in the caption."""
+    body_rows = []
+    for label, df, dec in _cross_condition_rows(groups):
+        dd = max(dec, 1)
+        is_a = df.index.map(groups.get) == GROUP_ADHD
+        delta = df["Robot"] - df["Control"]
+        cells = []
+        for sel in (is_a, ~is_a):
+            sub = df.loc[sel]
+            cells += [_fmt_v(sub[c].dropna().mean(), dd)
+                      for c in ("Robot", "Control")]
+            _, p_w, _ = _wilcoxon_cells(sub["Robot"], sub["Control"])
+            cells.append(p_w)
+        for s in (df["Robot"], df["Control"], delta):
+            _, p_u = _mwu_cells(s[is_a], s[~is_a])
+            cells.append(p_u)
+        cells = [c.replace("p = ", "").replace("p < ", "< ") for c in cells]
+        body_rows.append(f"{label} & " + " & ".join(cells) + " \\\\")
+    body = "\n".join(body_rows)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\begin{{tabular}}{{lrrcrrcccc}}
+\\toprule
+ & \\multicolumn{{3}}{{c}}{{ADHD}} & \\multicolumn{{3}}{{c}}{{No-ADHD}} &
+   \\multicolumn{{3}}{{c}}{{Mann-Whitney $p$}} \\\\
+\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
+ & Robot & No-rob. & $p_W$ & Robot & No-rob. & $p_W$
+ & Robot & No-rob. & $\\Delta$ \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def table_metrics_did(post, qtext, groups):
+    """Thesis version of the consolidated factorial (DiD) summary."""
+    return "session_metrics_did", _render_did_table(
+        groups, size="\\footnotesize", colsep="4pt")
+
+
+def table_metrics_did_col(post, qtext, groups):
+    """HRI version of the consolidated factorial (DiD) summary."""
+    return "session_metrics_did_col", _render_did_table(
+        groups, size="\\scriptsize", colsep="3pt")
+
+
 CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
-                  table_session_metrics, table_session_metrics_col]
+                  table_session_metrics, table_session_metrics_col,
+                  table_session_metrics_adhd, table_session_metrics_adhd_col,
+                  table_session_metrics_ctrl, table_session_metrics_ctrl_col,
+                  table_metrics_robot_by_group,
+                  table_metrics_robot_by_group_col,
+                  table_metrics_control_by_group,
+                  table_metrics_control_by_group_col,
+                  table_metrics_delta_by_group,
+                  table_metrics_delta_by_group_col,
+                  table_metrics_did, table_metrics_did_col]
 
 
 # ============================================================================
@@ -344,6 +721,21 @@ def main() -> None:
             sync_to_repo(target, names)
 
 
+# Per-fragment routing (decided 02.09): the 2x2 breakdown tables go to
+# the thesis appendix only; the consolidated DiD summary and everything
+# else ship to both repos. results_preview also stays thesis-only (it
+# \inputs fragments the HRI repo does not receive).
+THESIS_ONLY_FRAGMENTS = {
+    "session_metrics_adhd", "session_metrics_adhd_col",
+    "session_metrics_ctrl", "session_metrics_ctrl_col",
+    "session_metrics_robot_by_group", "session_metrics_robot_by_group_col",
+    "session_metrics_control_by_group",
+    "session_metrics_control_by_group_col",
+    "session_metrics_delta_by_group", "session_metrics_delta_by_group_col",
+    "results_preview",
+}
+
+
 def sync_to_repo(charts_dir: str, names: list[str]) -> None:
     """Copy the chart fragments into one target repo's results-charts/ and
     push (same mechanics as generate_appendix.sync_to_thesis_repo; every
@@ -353,7 +745,10 @@ def sync_to_repo(charts_dir: str, names: list[str]) -> None:
         print(f"--sync: {repo} not found — clone it first; skipping.")
         return
     os.makedirs(charts_dir, exist_ok=True)
-    for name in names + ["results_preview"]:
+    ship = names + ["results_preview"]
+    if "HRI" in os.path.basename(repo):
+        ship = [n for n in ship if n not in THESIS_ONLY_FRAGMENTS]
+    for name in ship:
         shutil.copy2(os.path.join(OUTPUT_DIR, f"{name}.tex"),
                      os.path.join(charts_dir, f"{name}.tex"))
     changed = subprocess.run(
