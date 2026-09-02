@@ -112,7 +112,7 @@ def disp_pid(pid) -> str:
 # (leading zeros stripped, so "0001" == "1"). Empty set = include everyone.
 INCLUDE_PIDS: set[str] = {"11", "12", "13", "14", "15", "16", "17", "18",
                           "19", "20", "21", "22", "23", "24", "25", "26",
-                          "27", "28", "29"}
+                          "27", "28", "29", "30", "31", "32"}
 
 # PIDs to exclude (applied after INCLUDE_PIDS; mostly redundant with a
 # whitelist, kept for when INCLUDE_PIDS is empty).
