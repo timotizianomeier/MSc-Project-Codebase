@@ -587,7 +587,7 @@ def stacked_chart(counts_by_group: dict[str, dict], cats: list[tuple], *,
                  f"coordinates {{{coords_a}}};")
     else:
         bar_opts = "ybar=2pt, bar width=8pt"
-        legend_cmd = "\n    \\legend{ADHD, Control}" if show_legend else ""
+        legend_cmd = "\n    \\legend{ADHD, No-ADHD}" if show_legend else ""
         plots = (f"\\addplot[ybar, fill={ADHD_COLOR}, draw={ADHD_COLOR}!70!black] "
                  f"coordinates {{{coords_a}}};\n"
                  f"    \\addplot[ybar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] "
@@ -638,7 +638,7 @@ def slider_chart(counts_by_group: dict[str, dict], *, width: str, height: str,
         if cv > 0:
             nodes.append(f"\\node[font=\\scriptsize, above, xshift=5pt] at (axis cs:{x},{cv}) {{{cv}}};")
     nodes_tex = "\n    ".join(nodes)
-    legend_cmd = "\n    \\legend{ADHD, Control}" if show_legend else ""
+    legend_cmd = "\n    \\legend{ADHD, No-ADHD}" if show_legend else ""
 
     return f"""\\begin{{tikzpicture}}[trim axis left, trim axis right]
   \\begin{{axis}}[
@@ -726,7 +726,7 @@ def category_table(df, col, groups, cats) -> str:
     return f"""\\begin{{center}}\\small
 \\begin{{tabular}}{{lrrr}}
 \\toprule
- & ADHD & Control & Overall \\\\
+ & ADHD & No-ADHD & Overall \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -738,7 +738,7 @@ def category_table(df, col, groups, cats) -> str:
 def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
                        title: str, header: str | None = None) -> str:
     """Stacked full-width layout (decided 30.08): the ADHD block first,
-    then the control block below it, each a plain flowing stream of
+    then the no-ADHD block below it, each a plain flowing stream of
     answers with uniform 5pt spacing. Ordinary page breaking applies
     everywhere, so this needs no minipages, no paracol and no height
     estimation (all earlier two-column variants retired). Group identity
@@ -755,7 +755,7 @@ def text_answers_table(answers_by_group: dict[str, list[tuple[str, str]]],
     head = (f"\\textbf{{{esc(header)}}}; \\textit{{{esc(title)}}}" if header
             else f"\\textit{{{esc(title)}}}")
     a = block(answers_by_group.get(GROUP_ADHD, []), ADHD_COLOR, "ADHD")
-    c = block(answers_by_group.get(GROUP_CONTROL, []), CTRL_COLOR, "Control")
+    c = block(answers_by_group.get(GROUP_CONTROL, []), CTRL_COLOR, "No-ADHD")
     return f"""\\noindent{head}\\par\\nopagebreak\\vspace{{0.3em}}
 {{\\small
 \\noindent\\rule{{\\linewidth}}{{0.6pt}}\\par\\nopagebreak\\vspace{{6pt}}
@@ -911,7 +911,7 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
             f"{u_cell} & {p_cell} \\\\")
     k = len(codes)
     code_heads = " & ".join(f"{v:g}" for v in codes)
-    note = (f"Each cell shows ADHD ($n = {n_a}$) $|$ control ($n = {n_c}$): "
+    note = (f"Each cell shows ADHD ($n = {n_a}$) $|$ no-ADHD ($n = {n_c}$): "
             "response counts per value, then mean, median and SD of the "
             f"coded responses. Mann-Whitney U per item ({len(items)} "
             "exploratory, uncorrected tests).")
@@ -926,7 +926,7 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
 \\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}rrrrr@{{}}}}
 \\toprule
 Item & {code_heads} & Mean & Md & SD & $U$ & $p$ \\\\
- & \\multicolumn{{{k + 3}}}{{c}}{{ADHD\\,$|$\\,control}} & & \\\\
+ & \\multicolumn{{{k + 3}}}{{c}}{{ADHD\\,$|$\\,no-ADHD}} & & \\\\
 \\midrule
 \\endhead
 {body}
@@ -961,7 +961,7 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
                 (a.median(), c.median()), (a.quantile(.75), c.quantile(.75)),
                 (a.max(), c.max())))
         rows.append(f"{shade}{dim} & {cells} & {u_cell} & {p_cell} \\\\")
-    note = (f"0--100 sliders. Each cell shows ADHD ($n = {n_a}$) $|$ control "
+    note = (f"0--100 sliders. Each cell shows ADHD ($n = {n_a}$) $|$ no-ADHD "
             f"($n = {n_c}$). Mann-Whitney U per dimension "
             f"({len(present)} exploratory, uncorrected tests).")
     body = "\n".join(rows)
@@ -971,7 +971,7 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
 \\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} rrrrr rr@{{}}}}
 \\toprule
 Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $U$ & $p$ \\\\
- & \\multicolumn{{5}}{{c}}{{ADHD\\,$|$\\,control}} & & \\\\
+ & \\multicolumn{{5}}{{c}}{{ADHD\\,$|$\\,no-ADHD}} & & \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1111,7 +1111,7 @@ def build_pre_study(pre, qtext, groups, src):
         "file": f"ASRS screening (threshold {ASRS_THRESHOLD}; see Methods)",
     }[GROUPING]
     out.append(f"\\noindent Group assignment based on {method}: "
-               f"$n_{{\\text{{ADHD}}}} = {n_a}$, $n_{{\\text{{Control}}}} = {n_c}$, "
+               f"$n_{{\\text{{ADHD}}}} = {n_a}$, $n_{{\\text{{No-ADHD}}}} = {n_c}$, "
                f"$N = {len(groups)}$.\\par\\vspace{{1em}}\n")
 
     # AGE
@@ -1183,7 +1183,7 @@ def build_post_control(ctrl, qtext, groups, src):
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
     out.append(slider_summary_table(ctrl, qtext, groups, tlx_cols,
-                                     "NASA-TLX (control session)"))
+                                     "NASA-TLX (no-robot session)"))
     return "\n".join(out)
 
 
@@ -1561,7 +1561,8 @@ def gate_note(groups: dict, sdirs: dict) -> str:
     """Human-readable summary of the coverage gate for fragment notes
     (display PIDs). Empty string if nothing is excluded."""
     gated = gated_signals(sdirs)
-    items = [f"P{disp_pid(pid)} {cond.lower()} session "
+    items = [f"P{disp_pid(pid)} "
+             f"{'robot' if cond == 'Robot' else 'no-robot'} session "
              f"{'engagement' if sig == 'eng' else 'negative affect'} "
              f"({100 * cov:.0f}\\%)"
              for (pid, cond, sig), cov in sorted(
@@ -1851,7 +1852,7 @@ def _session_metrics_table(met: dict, groups: dict, cond: str,
     return f"""\\begin{{center}}\\small
 \\begin{{tabular}}{{lrrrrr}}
 \\toprule
- & ADHD & Control & Overall & SD & Range \\\\
+ & ADHD & No-ADHD & Overall & SD & Range \\\\
  & \\multicolumn{{3}}{{c}}{{median [$Q_1$; $Q_3$]}} & & \\\\
 \\midrule
 {body}
@@ -2048,7 +2049,9 @@ def _episode_table(ep: pd.DataFrame) -> str:
             s = sub.dur.dropna()
             med = (f"{s.median():.0f} [{s.quantile(.25):.0f}; "
                    f"{s.quantile(.75):.0f}]") if len(s) else "--"
-            rows.append(f"{signame} & {cond} & {len(sub)} & "
+            rows.append(f"{signame} & "
+                        f"{'Robot' if cond == 'Robot' else 'No-Robot'} & "
+                        f"{len(sub)} & "
                         f"{int(sub.cued.sum())} & {int(sub.censored.sum())} & "
                         f"{med} \\\\")
     body = "\n".join(rows)
@@ -2105,12 +2108,12 @@ def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
     legend_box = (f"\\textcolor{{ApxADHD}}{{\\rule{{2ex}}{{1.2ex}}}} ADHD "
                   f"($n = {n_a}$), "
                   f"\\textcolor{{ApxControl}}{{\\rule{{2ex}}{{1.2ex}}}} "
-                  f"control ($n = {len(groups) - n_a}$); boxes span the "
+                  f"no-ADHD ($n = {len(groups) - n_a}$); boxes span the "
                   "quartiles, whiskers extend to the furthest value within "
                   "1.5 IQR, dots are outliers.")
     legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
                    "session, \\textcolor{ApxCondControl}{\\rule{2ex}{1.2ex}} "
-                   "control session; boxes span the quartiles, whiskers "
+                   "no-robot session; boxes span the quartiles, whiskers "
                    "extend to the furthest value within 1.5 IQR, dots are "
                    "outliers.")
     pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
@@ -2155,7 +2158,7 @@ def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lrrrr}
 \\toprule
-Scale & ADHD & Control & $U$ & $p$ \\\\
+Scale & ADHD & No-ADHD & $U$ & $p$ \\\\
  & \\multicolumn{2}{c}{mean (SD)} & & \\\\
 \\midrule
 """ + "\n".join(esq_rows) + """
@@ -2201,7 +2204,7 @@ Scale & ADHD & Control & $U$ & $p$ \\\\
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lrrr}
 \\toprule
- & ADHD & Control & Overall \\\\
+ & ADHD & No-ADHD & Overall \\\\
  & \\multicolumn{3}{c}{mean (SD)} \\\\
 \\midrule
 """ + "\n".join(nars_rows) + f"""
@@ -2209,7 +2212,7 @@ Scale & ADHD & Control & $U$ & $p$ \\\\
 \\end{{tabular}}\\\\[2pt]
 {{\\footnotesize Paired Wilcoxon pre vs post (all participants): """
                f"$W = {w}$, {wp} ($n = {wn}$). Change score ADHD vs "
-               f"control: Mann-Whitney $U = {cu}$, {cp}.}}\n"
+               f"no-ADHD: Mann-Whitney $U = {cu}$, {cp}.}}\n"
                "\\end{center}\n")
     out.append("\\begin{center}\n"
                + _paired_lines_chart(both, groups,
@@ -2218,7 +2221,7 @@ Scale & ADHD & Control & $U$ & $p$ \\\\
                "\\noindent{\\small Thin lines: individual participants; "
                "bold lines: group medians. \\textcolor{ApxADHD}"
                "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
-               "{\\rule{2ex}{1.2ex}} control group.}\\par\n")
+               "{\\rule{2ex}{1.2ex}} no-ADHD group.}\\par\n")
 
     # ------------------------------------------------------------ TLX
     tlx_rows, tlx_cols = [], []
@@ -2243,7 +2246,7 @@ Scale & ADHD & Control & $U$ & $p$ \\\\
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lrrrrr}
 \\toprule
-Dimension & Robot & Control & $n$ & $W$ & $p$ \\\\
+Dimension & Robot & No-Robot & $n$ & $W$ & $p$ \\\\
  & \\multicolumn{2}{c}{mean (SD)} & & & \\\\
 \\midrule
 """ + "\n".join(tlx_rows) + """
@@ -2278,12 +2281,12 @@ Dimension & Robot & Control & $n$ & $W$ & $p$ \\\\
 """ + "\n".join(sus_rows) + f"""
 \\bottomrule
 \\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Mann-Whitney U ADHD vs control: $U = {su}$, {sp}. """
+{{\\footnotesize Mann-Whitney U ADHD vs no-ADHD: $U = {su}$, {sp}. """
                "Bangor et al.'s multi-study mean is 68; Lalwani et al. "
                "report a mean of 76 ($n = 15$).}\n\\end{center}\n")
     out.append("\\begin{center}\n"
                + _box_chart([("ADHD", [(ADHD_COLOR, sus_a)]),
-                             ("Control", [(CTRL_COLOR, sus_c)]),
+                             ("No-ADHD", [(CTRL_COLOR, sus_c)]),
                              ("Overall", [("gray", sus)])],
                             ylabel="SUS score (0--100)",
                             width="0.5\\textwidth", ymax=100,
@@ -2310,7 +2313,7 @@ Dimension & Robot & Control & $n$ & $W$ & $p$ \\\\
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lrrr}
 \\toprule
- & ADHD & Control & Overall \\\\
+ & ADHD & No-ADHD & Overall \\\\
 \\midrule
 """ + "\n".join(ua_rows) + """
 \\bottomrule
@@ -2342,7 +2345,7 @@ Dimension & Robot & Control & $n$ & $W$ & $p$ \\\\
     out.append("""\\begin{center}\\small
 \\begin{tabular}{p{7.6cm}rrrrr}
 \\toprule
-Item & ADHD & Control & Overall & $U$ & $p$ \\\\
+Item & ADHD & No-ADHD & Overall & $U$ & $p$ \\\\
  & \\multicolumn{3}{c}{mean} & & \\\\
 \\midrule
 """ + "\n".join(feat_rows) + """
@@ -2365,7 +2368,7 @@ Item & ADHD & Control & Overall & $U$ & $p$ \\\\
     out.append("\\subsection*{TLX frustration mechanism (exploratory)}\n"
                "\\noindent{\\small Spearman correlations between "
                "robot-session behaviour (parsed logs) and the "
-               "robot-minus-control TLX frustration delta. Seven "
+               "robot-minus-no-robot TLX frustration delta. Seven "
                "uncorrected exploratory tests — a single nominal hit among "
                "them would itself require correction. Latency and "
                "turn-based rows have $n = 16$: one participant interacted "
@@ -2387,14 +2390,14 @@ Robot-session metric & Spearman $\\rho$ & $p$ & $n$ \\\\
                + _scatter_chart(sc, groups,
                                 xlabel="Robot talk-time (min)",
                                 ylabel="TLX frustration delta "
-                                       "(robot $-$ control)",
+                                       "(robot $-$ no-robot)",
                                 hline=0)
                + "\n\\end{center}\n"
                "\\noindent{\\small The strongest "
                "of the seven correlations. Dashed line: no difference "
                "between conditions. \\textcolor{ApxADHD}"
                "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
-               "{\\rule{2ex}{1.2ex}} control group.}\\par\n")
+               "{\\rule{2ex}{1.2ex}} no-ADHD group.}\\par\n")
     return "\n".join(out)
 
 
@@ -2411,7 +2414,7 @@ def build_session_stats(groups: dict[str, str]) -> str:
     n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
     legend_box = ("\\textcolor{ApxADHD}{\\rule{2ex}{1.2ex}} ADHD "
                   f"($n = {n_a}$), "
-                  "\\textcolor{ApxControl}{\\rule{2ex}{1.2ex}} control "
+                  "\\textcolor{ApxControl}{\\rule{2ex}{1.2ex}} no-ADHD "
                   f"($n = {len(groups) - n_a}$); boxes span the quartiles, "
                   "whiskers extend to the furthest value within 1.5 IQR, "
                   "dots are outliers.")
@@ -2438,13 +2441,13 @@ def build_session_stats(groups: dict[str, str]) -> str:
                + "\n\\end{center}\n"
                + "\\noindent{\\small " + legend_box + "}\\par\n")
 
-    out.append("\\subsection*{Session metrics — control sessions "
+    out.append("\\subsection*{Session metrics — no-robot sessions "
                "(counterfactuals)}\n"
                "\\noindent{\\small Counterfactual interventions are logged "
                "at the moment the deployed gate logic would have fired, but "
                "nothing is delivered. They are an upper bound on what the "
                "robot condition would have sent: with no conversation in the "
-               "control session, the 60-second interaction cooldown is only "
+               "no-robot session, the 60-second interaction cooldown is only "
                "ever reset by a counterfactual itself, so gating is strictly "
                "looser than in the robot condition. For signal series "
                "failing the coverage gate (note at the top of this "
@@ -2465,7 +2468,7 @@ def build_session_stats(groups: dict[str, str]) -> str:
                "Recovery is the time from episode start to the first poll "
                "back at threshold; a sensing gap of more than 30 seconds or "
                "the session end censors an episode (recovery unobserved). "
-               "Cued = an intervention (robot) or counterfactual (control) "
+               "Cued = an intervention (robot) or counterfactual (no-robot) "
                "fired during the episode. NB the cued and uncued rows must "
                "not be compared directly: an episode only receives a cue if "
                "it survives until the intervention gates open, so "
@@ -2564,7 +2567,7 @@ Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), med
     out.append("""\\begin{center}\\small
 \\begin{tabular}{llrrrrr}
 \\toprule
-Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
+Signal & Metric & Robot & No-Robot & $n$ & $W$ & $p$ \\\\
  & & \\multicolumn{2}{c}{median} & & & \\\\
 \\midrule
 """ + "\n".join(cc_rows) + """
@@ -2574,7 +2577,7 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
 """)
     legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
                    "session, \\textcolor{ApxCondControl}{\\rule{2ex}{1.2ex}} "
-                   "control session; boxes span the quartiles, whiskers "
+                   "no-robot session; boxes span the quartiles, whiskers "
                    "extend to the furthest value within 1.5 IQR, dots are "
                    "outliers.")
     out.append("\\begin{center}\n"
@@ -2593,7 +2596,7 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
     qrows = []
     for label, s in (("Robot session (all samples)", q["robot_all"]),
                      ("Robot session (quiet samples only)", q["robot_quiet"]),
-                     ("Control session", q["control"])):
+                     ("No-Robot session", q["control"])):
         s = s.dropna()
         qrows.append(f"{label} & {s.median():.3f} "
                      f"[{s.quantile(.25):.3f}; {s.quantile(.75):.3f}] \\\\")
@@ -2605,7 +2608,7 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
                "the same position). Per-session medians of the raw "
                "engagement score, with robot-session samples within "
                f"{QUIET_BUFFER_S:.0f}\\,s after any speech excluded in the "
-               "quiet-only row: a robot-vs-control offset that persists "
+               "quiet-only row: a robot-vs-no-robot offset that persists "
                "outside interaction windows would indicate an "
                "optics/geometry artefact rather than head motion during "
                "speech. Engagement series failing the coverage gate (note "
@@ -2619,23 +2622,23 @@ Signal & Metric & Robot & Control & $n$ & $W$ & $p$ \\\\
 """ + "\n".join(qrows) + f"""
 \\bottomrule
 \\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Paired Wilcoxon, robot quiet-only vs control: """
-               f"$W = {wq}$, {pq} ($n = {nq}$); all samples vs control: "
+{{\\footnotesize Paired Wilcoxon, robot quiet-only vs no-robot: """
+               f"$W = {wq}$, {pq} ($n = {nq}$); all samples vs no-robot: "
                f"$W = {wa}$, {pa} ($n = {na}$).}}\n\\end{{center}}\n")
 
     replay_tbl, dur = _replay_table(groups, sdirs, met)
     out.append("\\subsection*{Counterfactual replay sensitivity}\n"
-               "\\noindent{\\small Control-session counterfactual counts "
+               "\\noindent{\\small No-robot-session counterfactual counts "
                "re-computed by replaying the deployed gate logic over the "
                "logged poll series, with each fire additionally carrying the "
                "gating footprint of an intervention utterance "
                f"(mean {dur:.1f}\\,s across the robot sessions): the speaking "
                "gate is closed while it plays and the interaction cooldown "
                "restarts at its end. The zero-length replay reproduces the "
-               "deployed control behaviour and validates the "
+               "deployed no-robot behaviour and validates the "
                "re-implementation. Counts remain an upper bound: ordinary "
                "conversation, the dominant intervention suppressor in the "
-               "robot sessions, has no control-condition counterpart and is "
+               "robot sessions, has no counterpart in the no-robot condition and is "
                "not simulated.}\\par\\vspace{0.4em}\n")
     out.append(replay_tbl)
     return "\n".join(out)
@@ -2656,7 +2659,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                    f"\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}\n"
                    + chart + ("" if last else "\n\\newpage\n"))
 
-    order_note = ("Rows: ADHD-group participants first, then the control "
+    order_note = ("Rows: ADHD-group participants first, then the no-ADHD "
                   "group (ascending within each).")
     legend_int = ("Speech segments per participant over the 45-minute robot "
                   "session: \\textcolor{ApxUserSpeech}{\\rule{2ex}{1.2ex}} user, "
@@ -2692,7 +2695,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      _neg_mass,
                      lambda r: _float_or_none(r, "negative_share"),
                      0.60, {"intervention_emotion_sent"}, "ApxTrigEmo"))
-    sub("Engagement scores (control sessions)",
+    sub("Engagement scores (no-robot sessions)",
         legend_score.format(thr="0.80",
                             color="\\textcolor{ApxTrigEng}{red}",
                             what="counterfactual engagement interventions "
@@ -2701,7 +2704,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      lambda r: _float_or_none(r, "score"),
                      lambda r: _float_or_none(r, "average"),
                      0.80, {"counterfactual_engagement"}, "ApxTrigEng"))
-    sub("Negative-affect scores (control sessions)",
+    sub("Negative-affect scores (no-robot sessions)",
         legend_score.format(thr="0.60",
                             color="\\textcolor{ApxTrigEmo}{green}",
                             what="counterfactual emotion interventions "
