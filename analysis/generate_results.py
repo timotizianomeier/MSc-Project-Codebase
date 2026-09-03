@@ -343,7 +343,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
                      for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}{specs[-1]}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} & {{MWU}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 2}}}
@@ -351,7 +351,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def table_session_metrics(post, qtext, groups):
@@ -524,7 +524,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}{specs[-2]}{specs[-1]}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,Control}} &
    \\multicolumn{{2}}{{c}}{{Wilcoxon}} \\\\
@@ -533,7 +533,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def table_session_metrics_adhd(post, qtext, groups):
@@ -587,7 +587,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{pair_spec}c{specs[-1]}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{{header}}} &
    \\multicolumn{{2}}{{c}}{{MWU}} \\\\
@@ -596,7 +596,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def _fixed_condition_rows(groups, cond):
@@ -890,7 +890,7 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{"".join(specs)}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{"".join(specs)}@{{}}}}
 \\toprule
  & \\multicolumn{{3}}{{c}}{{First half}} &
    \\multicolumn{{3}}{{c}}{{Second half}} &
@@ -901,7 +901,7 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def table_metrics_halves_adhd(post, qtext, groups):
@@ -967,13 +967,13 @@ def _render_suggestions_table(*, stmt_w, size) -> str:
         lines.append("\\addlinespace")
     body = "\n".join(lines[:-1])  # drop trailing spacer
     return f"""\\begingroup\\centering{size}
-\\begin{{tabular}}{{@{{}}p{{{stmt_w}}}r@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
 \\toprule
 \\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def table_suggestions(post, qtext, groups):
