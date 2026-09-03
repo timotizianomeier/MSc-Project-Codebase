@@ -384,7 +384,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,No-ADHD}} &
    \\multicolumn{{2}}{{c}}{{$p$}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
- & {heads} & {{MWU}} & {{$t$}} \\\\
+ & {heads} & {{$p_U$}} & {{$p_t$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1286,7 +1286,7 @@ def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
 \\toprule
  & & \\multicolumn{{2}}{{c}}{{Mean}} & \\multicolumn{{2}}{{c}}{{$p$}} \\\\
 \\cmidrule(lr){{3-4}} \\cmidrule(lr){{5-6}}
- & & {{ADHD}} & {{No-ADHD}} & {{MWU}} & {{$t$}} \\\\
+ & & {{ADHD}} & {{No-ADHD}} & {{$p_U$}} & {{$p_t$}} \\\\
  & & {{($n={na}$)}} & {{($n={nc}$)}} & & \\\\
 \\midrule
 {body}
