@@ -131,7 +131,8 @@ def _feature_data(post, qtext, groups):
 def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
                           label_font, title_font, tick_anchors, value_labels,
                           value_font="\\scriptsize", xmax=5.6,
-                          span_ext="0.3cm", value_extra_pt=0.0):
+                          span_ext="0.3cm", value_extra_pt=0.0,
+                          adhd_only=False):
     """Render the grouped-bar feature chart at a given size. See
     chart_feature_means / chart_feature_means_col for the two variants."""
     all_keys, all_texts, data_rows, block_spans = data
@@ -145,7 +146,15 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
     # axis -> explicit value nodes at each bar's own offset (ADHD on top:
     # Control plots first / lower).
     value_nodes = ""
-    if value_labels:
+    if value_labels and adhd_only:
+        # single-bar variant (restored 04.09): labels sit on the bar end,
+        # no pair offset needed
+        value_nodes = "\n    ".join(
+            f"\\node[font={value_font}, inner sep=1pt, anchor=west,"
+            f" xshift=2pt] "
+            f"at (axis cs:{a:.2f},{k}) {{{a:.2f}}};"
+            for k, a, c in data_rows)
+    elif value_labels:
         # value_extra_pt pushes the labels slightly beyond the bar centres —
         # needed in the compact variant where half a bar width is less than
         # the label text's half-height.
@@ -180,6 +189,16 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
         f" {{{esc(title).replace(' ', chr(92) * 2)}}};"
         for i, (title, _, _) in enumerate(block_spans))
 
+    if adhd_only:
+        plots = (f"\\addplot[xbar, fill={ADHD_COLOR}, "
+                 f"draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};")
+    else:
+        plots = (
+            f"\\addplot[xbar, fill={CTRL_COLOR}, "
+            f"draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};\n"
+            f"    \\addplot[xbar, fill={ADHD_COLOR}, "
+            f"draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};\n"
+            f"    \\legend{{Control, ADHD}}")
     # NO trim axis (see thesis variant note): the full bounding box must
     # include labels so \centering centers the ensemble.
     return f"""\\begin{{tikzpicture}}
@@ -199,9 +218,7 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
     legend image code/.code={{\\draw[#1] (0cm,-0.06cm) rectangle (0.18cm,0.12cm);}},
     reverse legend,
   ]
-    \\addplot[xbar, fill={CTRL_COLOR}, draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};
-    \\addplot[xbar, fill={ADHD_COLOR}, draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};
-    \\legend{{Control, ADHD}}
+    {plots}
     {value_nodes}
     {span_coords}
   \\end{{axis}}
@@ -1242,7 +1259,30 @@ def table_suggestions_col(post, qtext, groups):
         stmt_w="0.68\\columnwidth", size="\\footnotesize")
 
 
+def chart_feature_means_adhd(post, qtext, groups):
+    """Thesis version, ADHD group only (restored 04.09): single blue
+    bars, no legend, value labels on the bar ends."""
+    data = _feature_data(post, qtext, groups)
+    return "feature_means_adhd", _render_feature_chart(
+        data, axis_w="0.48\\textwidth", label_w="0.42\\textwidth",
+        pitch="0.58cm", bar_pt=6.5, label_font="\\small",
+        title_font="\\small\\bfseries", tick_anchors=True,
+        value_labels=True, adhd_only=True)
+
+
+def chart_feature_means_adhd_col(post, qtext, groups):
+    """ACM column-width version of the ADHD-only feature chart."""
+    data = _feature_data(post, qtext, groups)
+    return "feature_means_adhd_col", _render_feature_chart(
+        data, axis_w="0.40\\columnwidth", label_w="0.46\\columnwidth",
+        pitch="0.38cm", bar_pt=4.5, label_font="\\scriptsize",
+        title_font="\\scriptsize\\bfseries", tick_anchors=False,
+        value_labels=True, value_font="\\tiny", xmax=5.6,
+        span_ext="0.18cm", adhd_only=True)
+
+
 CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
+                  chart_feature_means_adhd, chart_feature_means_adhd_col,
                   table_session_metrics, table_session_metrics_col,
                   table_session_metrics_adhd, table_session_metrics_adhd_col,
                   table_session_metrics_ctrl, table_session_metrics_ctrl_col,
