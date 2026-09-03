@@ -372,7 +372,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
     # pairs keep the bar-anchored r/l alignment (a full decimal grid
     # across count and score rows would add ~100pt of reserved width);
     # the p column is an S column so its values align on the point.
-    pair_spec = "r@{\\,$|$\\,}l" * n_stats
+    pair_spec = "r@{\\extracolsep{0pt}\\,$|$\\,}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
     body = "\n".join(" & ".join(_scell(c) if i else c
                                 for i, c in enumerate(r)) + " \\\\"
@@ -539,7 +539,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
     specs = _sspecs([r[1:] for r in body_rows])
-    pair_spec = "r@{$|$}l" * n_stats  # see robot-table note
+    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats  # tight bars; fill between groups
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
     body = "\n".join(" & ".join(_scell(c) if i else c
                                 for i, c in enumerate(r)) + " \\\\"
@@ -602,7 +602,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
     specs = _sspecs([r[1:] for r in body_rows])
-    pair_spec = "r@{$|$}l" * n_stats  # see robot-table note
+    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats  # tight bars; fill between groups
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
     body = "\n".join(" & ".join(_scell(c2) if i else c2
                                 for i, c2 in enumerate(r)) + " \\\\"
@@ -974,6 +974,219 @@ def table_metrics_pooled_by_group(post, qtext, groups):
         _pooled_rows(groups), groups,
         header="ADHD\\,$|$\\,No-ADHD (conditions pooled)", quartiles=False,
         size="\\footnotesize", colsep="3pt")
+
+
+_GREYRULE = ("\\arrayrulecolor{black!25}\\cmidrule{{1-{n}}}"
+             "\\arrayrulecolor{black}")
+
+
+def _render_within_scopes_table(groups, *, size, colsep) -> str:
+    """Consolidated within-subjects table (user layout 05.09 v2): each
+    metric is a full-width bold header line, followed by All / ADHD /
+    No-ADHD scope rows; Robot|No-Robot stat pairs without quartiles."""
+    scopes = [("All", None), ("ADHD", GROUP_ADHD), ("No-ADHD", GROUP_CONTROL)]
+    per_scope = {name: {l: (df, dec) for l, df, dec
+                        in _cross_condition_rows(groups, g)}
+                 for name, g in scopes}
+    labels = [l for l, _, _ in _cross_condition_rows(groups)]
+    blocks = []
+    for label in labels:
+        rows = []
+        for name, _ in scopes:
+            df, dec = per_scope[name][label]
+            df = df.dropna()
+            r, c = df["Robot"], df["Control"]
+            dd = max(dec, 1)
+            stats_ = [(r.min(), c.min(), dec), (r.mean(), c.mean(), dd),
+                      (r.median(), c.median(), dd), (r.max(), c.max(), dec),
+                      (r.std(ddof=1), c.std(ddof=1), dd)]
+            _, p, n = _wilcoxon_cells(r, c)
+            rows.append([name]
+                        + [_scell(_fmt_v(x, d).replace("100.0", "100"))
+                           for a, b, d in stats_ for x in (a, b)]
+                        + [_scell(str(n)), _pcell(p), _pairedt_p(r, c)])
+        blocks.append((_DID_FULL_LABELS.get(label, label), rows))
+    specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
+    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * 5
+    ncols = 15
+    lines = []
+    for bi, (label, rows) in enumerate(blocks):
+        if bi:
+            lines.append("\\arrayrulecolor{black!25}"
+                         f"\\cmidrule{{1-{ncols}}}"
+                         "\\arrayrulecolor{black}")
+        for i, r in enumerate(rows):
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{2.35cm}}"
+                   f"{{\\raggedright {label}}}" if i == 0 else "")
+            lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
+    body = "\n".join(lines)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\setlength{{\\aboverulesep}}{{0.15ex}}\\setlength{{\\belowrulesep}}{{0.3ex}}%
+\\begin{{tabular*}}{{\\textheight}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-3]}{specs[-2]}{specs[-1]}@{{}}}}
+\\toprule
+ & & \\multicolumn{{10}}{{c}}{{Robot\\,$|$\\,No-Robot}} &
+   \\multicolumn{{3}}{{c}}{{Within-subject}} \\\\
+\\cmidrule(lr){{3-12}} \\cmidrule(lr){{13-15}}
+Measure & Scope & \\multicolumn{{2}}{{c}}{{Min}} &
+  \\multicolumn{{2}}{{c}}{{Mean}} & \\multicolumn{{2}}{{c}}{{Median}} &
+  \\multicolumn{{2}}{{c}}{{Max}} & \\multicolumn{{2}}{{c}}{{SD}} &
+  {{$n$}} & {{$p_W$}} & {{$p_t$}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular*}}\\par\\endgroup"""
+
+
+def table_metrics_within_combined(post, qtext, groups):
+    """Consolidated within-subjects table (All/ADHD/No-ADHD sub-rows)."""
+    return "session_metrics_within_combined", _render_within_scopes_table(
+        groups, size="\\footnotesize", colsep="3pt")
+
+
+def _render_between_scopes_table(groups, *, size, colsep) -> str:
+    """Consolidated between-subjects table (v2): full-width metric
+    header lines; Robot / No-Robot / Delta scope rows below each."""
+    sources = [("Robot", {l: (sr, dec) for l, sr, dec
+                          in _fixed_condition_rows(groups, "Robot")}),
+               ("No-Robot", {l: (sr, dec) for l, sr, dec
+                             in _fixed_condition_rows(groups, "Control")}),
+               ("$\\Delta$", {l: (sr, dec) for l, sr, dec
+                              in _delta_rows(groups)})]
+    labels = [l for l, _, _ in _cross_condition_rows(groups)]
+    blocks = []
+    for label in labels:
+        rows = []
+        for name, rowmap in sources:
+            sr, dec = rowmap[label]
+            sr = sr.dropna()
+            a = sr[sr.index.map(groups.get) == GROUP_ADHD]
+            c = sr[sr.index.map(groups.get) == GROUP_CONTROL]
+            dd = max(dec, 1)
+            stats_ = [(a.min(), c.min(), dec), (a.mean(), c.mean(), dd),
+                      (a.median(), c.median(), dd), (a.max(), c.max(), dec),
+                      (a.std(ddof=1), c.std(ddof=1), dd)]
+            _, p = _mwu_cells(a, c)
+            rows.append([name]
+                        + [_scell(_fmt_v(x, d).replace("100.0", "100"))
+                           for x1, y1, d in stats_ for x in (x1, y1)]
+                        + [_scell(f"{len(a)}$|${len(c)}"), _pcell(p),
+                           _welch_p(a, c)])
+        blocks.append((_DID_FULL_LABELS.get(label, label), rows))
+    specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
+    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * 5
+    ncols = 15
+    lines = []
+    for bi, (label, rows) in enumerate(blocks):
+        if bi:
+            lines.append("\\arrayrulecolor{black!25}"
+                         f"\\cmidrule{{1-{ncols}}}"
+                         "\\arrayrulecolor{black}")
+        for i, r in enumerate(rows):
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{2.35cm}}"
+                   f"{{\\raggedright {label}}}" if i == 0 else "")
+            lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
+    body = "\n".join(lines)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\setlength{{\\aboverulesep}}{{0.15ex}}\\setlength{{\\belowrulesep}}{{0.3ex}}%
+\\begin{{tabular*}}{{\\textheight}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-2]}{specs[-1]}@{{}}}}
+\\toprule
+ & & \\multicolumn{{10}}{{c}}{{ADHD\\,$|$\\,No-ADHD}} &
+   \\multicolumn{{3}}{{c}}{{Between groups}} \\\\
+\\cmidrule(lr){{3-12}} \\cmidrule(lr){{13-15}}
+Measure & Scope & \\multicolumn{{2}}{{c}}{{Min}} &
+  \\multicolumn{{2}}{{c}}{{Mean}} & \\multicolumn{{2}}{{c}}{{Median}} &
+  \\multicolumn{{2}}{{c}}{{Max}} & \\multicolumn{{2}}{{c}}{{SD}} &
+  $n$ & {{$p_U$}} & {{$p_t$}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular*}}\\par\\endgroup"""
+
+
+def table_metrics_between_combined(post, qtext, groups):
+    """Consolidated between-subjects table (Robot/No-Robot/Delta rows)."""
+    return "session_metrics_between_combined", _render_between_scopes_table(
+        groups, size="\\footnotesize", colsep="3pt")
+
+
+def _render_halves_scopes_table(groups, *, size, colsep) -> str:
+    """Consolidated halves table (v2): full-width metric header lines;
+    All / ADHD / No-ADHD scope rows with the halves column structure."""
+    scopes = [("All", set(groups)),
+              ("ADHD", {p for p, g in groups.items() if g == GROUP_ADHD}),
+              ("No-ADHD", {p for p, g in groups.items()
+                           if g == GROUP_CONTROL})]
+    per_scope = {name: {l: (vals, dec) for l, vals, dec
+                        in _half_split_rows(groups, members)}
+                 for name, members in scopes}
+    labels = [l for l, _, _ in _half_split_rows(groups, set(groups))]
+    blocks = []
+    for label in labels:
+        rows = []
+        for name, _ in scopes:
+            vals, dec = per_scope[name][label]
+            dd = max(dec, 1)
+            ser = {(c2, h): pd.Series(
+                {pid: v for (pid, cc, hh), v in vals.items()
+                 if cc == c2 and hh == h})
+                for c2 in ("Robot", "Control") for h in (1, 2)}
+            cells = [name]
+            for h in (1, 2):
+                r, c2 = ser[("Robot", h)], ser[("Control", h)]
+                cells += [_scell(_fmt_v(r.mean() if len(r) else None, dd)),
+                          _scell(_fmt_v(c2.mean() if len(c2) else None, dd))]
+                _, p, _ = _wilcoxon_cells(r, c2)
+                cells += [_pcell(p), _pairedt_p(r, c2)]
+            for a, b in ((ser[("Robot", 1)], ser[("Robot", 2)]),
+                         (ser[("Control", 1)], ser[("Control", 2)])):
+                _, p, _ = _wilcoxon_cells(a, b)
+                cells += [_pcell(p), _pairedt_p(a, b)]
+            dr = ser[("Robot", 2)] - ser[("Robot", 1)]
+            dc = ser[("Control", 2)] - ser[("Control", 1)]
+            _, p, n = _wilcoxon_cells(dr, dc)
+            cells += [_pcell(p), _pairedt_p(dr, dc), _scell(str(n))]
+            rows.append(cells)
+        blocks.append((_DID_FULL_LABELS.get(label, label), rows))
+    specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
+    ncols = 17
+    lines = []
+    for bi, (label, rows) in enumerate(blocks):
+        if bi:
+            lines.append("\\arrayrulecolor{black!25}"
+                         f"\\cmidrule{{1-{ncols}}}"
+                         "\\arrayrulecolor{black}")
+        for i, r in enumerate(rows):
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{1.9cm}}"
+                   f"{{\\raggedright {label}}}" if i == 0 else "")
+            lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
+    body = "\n".join(lines)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\setlength{{\\aboverulesep}}{{0.15ex}}\\setlength{{\\belowrulesep}}{{0.3ex}}%
+\\begin{{tabular*}}{{\\textheight}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{"".join(specs)}@{{}}}}
+\\toprule
+ & & \\multicolumn{{4}}{{c}}{{First half}} &
+   \\multicolumn{{4}}{{c}}{{Second half}} &
+   \\multicolumn{{7}}{{c}}{{1st vs 2nd (within-subject)}} \\\\
+\\cmidrule(lr){{3-6}} \\cmidrule(lr){{7-10}} \\cmidrule(lr){{11-17}}
+ & & & & & & & & & & \\multicolumn{{2}}{{c}}{{Robot}} &
+   \\multicolumn{{2}}{{c}}{{No-rob.}} &
+   \\multicolumn{{2}}{{c}}{{$\\Delta$}} & \\\\
+Measure & Scope & {_sheads(["Robot", "No-rob.", "$p_W$", "$p_t$", "Robot",
+             "No-rob.", "$p_W$", "$p_t$", "$p_W$", "$p_t$",
+             "$p_W$", "$p_t$", "$p_W$", "$p_t$", "$n$"])} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular*}}\\par\\endgroup"""
+
+
+def table_metrics_halves_combined(post, qtext, groups):
+    """Consolidated halves table (All/ADHD/No-ADHD sub-rows)."""
+    return "session_metrics_halves_combined", _render_halves_scopes_table(
+        groups, size="\\footnotesize", colsep="2pt")
 
 
 def table_metrics_halves_pooled(post, qtext, groups):
@@ -1360,6 +1573,9 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_pooled_by_group_col,
                   table_reengagement,
                   table_metrics_halves_pooled,
+                  table_metrics_within_combined,
+                  table_metrics_between_combined,
+                  table_metrics_halves_combined,
                   table_feature_stats, table_feature_stats_col,
                   table_suggestions, table_suggestions_col]
 
@@ -1419,6 +1635,8 @@ THESIS_ONLY_FRAGMENTS = {
     "session_metrics_pooled_by_group", "session_metrics_pooled_by_group_col",
     "session_reengagement",
     "session_metrics_halves_pooled",
+    "session_metrics_within_combined", "session_metrics_between_combined",
+    "session_metrics_halves_combined",
     "results_preview",
 }
 
