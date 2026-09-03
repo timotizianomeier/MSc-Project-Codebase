@@ -1243,10 +1243,11 @@ def _render_suggestions_table(*, cat_w, stmt_w, size) -> str:
             keep = "*" if i < len(items) - 1 else ""
             lines.append(f"{cat_cell} & {stmt} & {n} ({pct}\\%) "
                          f"\\\\{keep}")
-        lines.append("\\addlinespace")
-    body = "\n".join(lines[:-1])  # drop trailing spacer
+        lines.append("\\arrayrulecolor{black!25}\\cmidrule{1-3}"
+                     "\\arrayrulecolor{black}")
+    body = "\n".join(lines[:-1])  # drop trailing rule
     return f"""\\begingroup\\centering{size}
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}p{{{cat_w}}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}>{{\\raggedright\\arraybackslash}}p{{{cat_w}}}>{{\\raggedright\\arraybackslash}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
 \\toprule
 \\textbf{{Category}} & \\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
 \\midrule
@@ -1258,14 +1259,14 @@ def _render_suggestions_table(*, cat_w, stmt_w, size) -> str:
 def table_suggestions(post, qtext, groups):
     """Thesis version of the ADHD improvement-suggestions table."""
     return "improvement_suggestions", _render_suggestions_table(
-        cat_w="0.17\\textwidth", stmt_w="0.58\\textwidth",
+        cat_w="0.26\\textwidth", stmt_w="0.52\\textwidth",
         size="\\small")
 
 
 def table_suggestions_col(post, qtext, groups):
     """HRI column-width version."""
     return "improvement_suggestions_col", _render_suggestions_table(
-        cat_w="0.22\\columnwidth", stmt_w="0.5\\columnwidth",
+        cat_w="0.26\\columnwidth", stmt_w="0.48\\columnwidth",
         size="\\footnotesize")
 
 
