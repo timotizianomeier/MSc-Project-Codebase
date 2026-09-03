@@ -198,7 +198,7 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
             f"draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};\n"
             f"    \\addplot[xbar, fill={ADHD_COLOR}, "
             f"draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};\n"
-            f"    \\legend{{Control, ADHD}}")
+            f"    \\legend{{No-ADHD, ADHD}}")
     # NO trim axis (see thesis variant note): the full bounding box must
     # include labels so \centering centers the ensemble.
     return f"""\\begin{{tikzpicture}}
@@ -380,7 +380,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
- & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} &
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,No-ADHD}} &
    \\multicolumn{{2}}{{c}}{{$p$}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
  & {heads} & {{MWU}} & {{$t$}} \\\\
@@ -562,7 +562,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-3]}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
- & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,Control}} &
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,No-Robot}} &
    \\multicolumn{{3}}{{c}}{{Within-subject}} \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 4}}}
  & {heads} & {{$n$}} & {{$p_W$}} & {{$p_t$}} \\\\
@@ -657,7 +657,7 @@ def table_metrics_robot_by_group(post, qtext, groups):
     """Thesis: robot-session values, ADHD vs control, MWU."""
     return "session_metrics_robot_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Robot"), groups,
-        header="ADHD\\,$|$\\,Control (robot session)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (Robot session)", quartiles=False,
         size="\\footnotesize", colsep="3pt")
 
 
@@ -665,7 +665,7 @@ def table_metrics_robot_by_group_col(post, qtext, groups):
     """HRI variant of the robot-session group table."""
     return "session_metrics_robot_by_group_col", _render_group_stats_table(
         _fixed_condition_rows(groups, "Robot"), groups,
-        header="ADHD\\,$|$\\,Control (robot session)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (Robot session)", quartiles=False,
         size="\\scriptsize", colsep="3pt")
 
 
@@ -673,7 +673,7 @@ def table_metrics_control_by_group(post, qtext, groups):
     """Thesis: control-session values, ADHD vs control, MWU."""
     return "session_metrics_control_by_group", _render_group_stats_table(
         _fixed_condition_rows(groups, "Control"), groups,
-        header="ADHD\\,$|$\\,Control (control session)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (No-Robot session)", quartiles=False,
         size="\\footnotesize", colsep="3pt")
 
 
@@ -681,7 +681,7 @@ def table_metrics_control_by_group_col(post, qtext, groups):
     """HRI variant of the control-session group table."""
     return "session_metrics_control_by_group_col", _render_group_stats_table(
         _fixed_condition_rows(groups, "Control"), groups,
-        header="ADHD\\,$|$\\,Control (control session)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (No-Robot session)", quartiles=False,
         size="\\scriptsize", colsep="3pt")
 
 
@@ -690,7 +690,7 @@ def table_metrics_delta_by_group(post, qtext, groups):
     nonparametric group-by-condition interaction check."""
     return "session_metrics_delta_by_group", _render_group_stats_table(
         _delta_rows(groups), groups,
-        header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
+        header="ADHD\\,$|$\\,No-ADHD ($\\Delta$ Robot $-$ No-Robot)",
         quartiles=False, size="\\footnotesize", colsep="3pt")
 
 
@@ -698,7 +698,7 @@ def table_metrics_delta_by_group_col(post, qtext, groups):
     """HRI variant of the delta table."""
     return "session_metrics_delta_by_group_col", _render_group_stats_table(
         _delta_rows(groups), groups,
-        header="ADHD\\,$|$\\,Control ($\\Delta$ robot $-$ control)",
+        header="ADHD\\,$|$\\,No-ADHD ($\\Delta$ Robot $-$ No-Robot)",
         quartiles=False, size="\\scriptsize", colsep="3pt")
 
 
@@ -996,7 +996,7 @@ def table_metrics_pooled_by_group(post, qtext, groups):
     both conditions."""
     return "session_metrics_pooled_by_group", _render_group_stats_table(
         _pooled_rows(groups), groups,
-        header="ADHD\\,$|$\\,Control (conditions pooled)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (conditions pooled)", quartiles=False,
         size="\\footnotesize", colsep="3pt")
 
 
@@ -1039,35 +1039,52 @@ def table_metrics_halves_pooled(post, qtext, groups):
 
 
 def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
-    """Companion stats table to the feature-means chart: per Likert item
-    the group means with MWU and Welch-t p (Nicole 03.09: t twins)."""
-    body_rows = []
+    """Companion stats table to the feature-means chart. Layout decided
+    04.09: rotated block labels on the left (mirroring the chart's
+    bracket labels), group ns under the column labels, light-grey rules
+    between blocks. Needs multirow + graphicx + colortbl."""
+    blocks, ns = [], (0, 0)
+    pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
     for title, prefix, n_items in FEATURE_BLOCKS:
-        body_rows.append([f"\\multicolumn{{6}}{{l}}{{\\textbf{{{title}}}}}"])
+        items = []
         for i in range(1, n_items + 1):
             col = f"{prefix}{i}"
             if col not in post.columns:
                 continue
             v = to_rank(post[col], "LIKERT5")
-            pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
             a = v[post["PID"].isin(pids_a)]
             c = v[~post["PID"].isin(pids_a)]
             _, p_u = _mwu_cells(a, c)
-            body_rows.append([
-                "\\quad " + esc(SHORT_LABELS.get(
-                    col, strip_stem(qtext.get(col, col)))),
-                _scell(f"{a.mean():.2f}"), _scell(f"{c.mean():.2f}"),
-                _scell(f"{a.dropna().size}$|${c.dropna().size}"),
-                _pcell(p_u), _welch_p(a, c)])
-    specs = _sspecs([r[1:] for r in body_rows if len(r) > 1])
-    body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
+            items.append((
+                esc(SHORT_LABELS.get(col, strip_stem(qtext.get(col, col)))),
+                f"{a.mean():.2f}", f"{c.mean():.2f}",
+                _pcell(p_u), _welch_p(a, c)))
+            ns = (a.dropna().size, c.dropna().size)
+        blocks.append((title, items))
+    lines = []
+    for bi, (title, items) in enumerate(blocks):
+        stack = title.replace(" ", "\\\\")
+        for i, (lbl, ma, mc, pu, pt) in enumerate(items):
+            rot = ""
+            if i == 0:
+                rot = (f"\\multirow{{{len(items)}}}{{*}}"
+                       f"{{\\rotatebox[origin=c]{{90}}{{\\tiny"
+                       f"\\bfseries\\shortstack{{{stack}}}}}}}")
+            lines.append(f"{rot} & {lbl} & {ma} & {mc} & {pu} & {pt} \\\\")
+        if bi < len(blocks) - 1:
+            lines.append("\\arrayrulecolor{black!25}\\cmidrule{2-6}"
+                         "\\arrayrulecolor{black}")
+    body = "\n".join(lines)
+    na, nc = ns
     return f"""\\begingroup\\centering{size}
+\\renewcommand{{\\arraystretch}}{{1.2}}%
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{l{specs[0]}{specs[1]}c{specs[3]}{specs[4]}}}
+\\begin{{tabular}}{{clS[table-format=1.2]S[table-format=1.2]S[table-format=1.3]S[table-format=1.3]}}
 \\toprule
- & \\multicolumn{{2}}{{c}}{{Mean}} & & \\multicolumn{{2}}{{c}}{{$p$}} \\\\
-\\cmidrule(lr){{2-3}} \\cmidrule(lr){{5-6}}
- & {{ADHD}} & {{Control}} & $n$ & {{MWU}} & {{$t$}} \\\\
+ & & \\multicolumn{{2}}{{c}}{{Mean}} & \\multicolumn{{2}}{{c}}{{$p$}} \\\\
+\\cmidrule(lr){{3-4}} \\cmidrule(lr){{5-6}}
+ & & {{ADHD}} & {{No-ADHD}} & {{MWU}} & {{$t$}} \\\\
+ & & {{($n={na}$)}} & {{($n={nc}$)}} & & \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1090,7 +1107,7 @@ def table_metrics_pooled_by_group_col(post, qtext, groups):
     """HRI-sized variant of the pooled group table."""
     return "session_metrics_pooled_by_group_col", _render_group_stats_table(
         _pooled_rows(groups), groups,
-        header="ADHD\\,$|$\\,Control (conditions pooled)", quartiles=False,
+        header="ADHD\\,$|$\\,No-ADHD (conditions pooled)", quartiles=False,
         size="\\scriptsize", colsep="3pt")
 
 
@@ -1133,62 +1150,118 @@ def _reengagement_gaps(groups) -> pd.DataFrame:
     return pd.DataFrame(recs)
 
 
-def table_reengagement(post, qtext, groups):
-    """Post-intervention re-engagement table (thesis appendix): time to
-    re-engage after a cue (from episode_records' rec_cue_end) and the
-    engaged gap until the next episode, cued vs uncued (naive, noted)
-    and robot vs control (paired per participant, Wilcoxon)."""
+_DIALOGUE_CHAIN_GAP_S = 10.0  # speech gap that still counts as one dialogue
+
+
+def _post_cue_recovery(groups):
+    """Simplified re-engagement analysis (user design 04.09).
+    Robot sessions: for every intervention, wait until the ensuing
+    dialogue ends (the cue utterance plus any speech, either actor,
+    chained while gaps stay below _DIALOGUE_CHAIN_GAP_S), then measure
+    the time until the signal is first back at threshold (0-ish if it
+    recovered during the dialogue). Control sessions: plain observed
+    episode durations (below-threshold start to back-at-threshold).
+    NB the two clocks start at different points (post-dialogue vs
+    episode start) — descriptive comparison only. Coverage gate applies;
+    never-recovered cases are censored and only counted."""
     sdirs = session_dirs()
-    ep, _ = episode_records(groups, sdirs)
-    gaps = _reengagement_gaps(groups)
+    gated = gated_signals(sdirs)
+    rob, ctl, cens = [], [], 0
+    for (pid, cond), d in sdirs.items():
+        if pid not in groups:
+            continue
+        for sig in ("eng", "emo"):
+            if (pid, cond, sig) in gated:
+                continue
+            polls = signal_polls(d, sig)
+            if not polls:
+                continue
+            if cond == "Control":
+                for e in extract_episodes(polls):
+                    if e["t1"] is not None:
+                        ctl.append({"pid": pid, "sig": sig,
+                                    "dur": e["t1"] - e["t0"]})
+                    else:
+                        cens += 1
+                continue
+            base = "engagement" if sig == "eng" else "emotion"
+            cues = [float(r["t_session_s"])
+                    for r in _log_rows(d, "events.csv")
+                    if r["event_type"] == f"intervention_{base}"
+                    and r["t_session_s"]]
+            speech = sorted(
+                (float(r["t_start_s"]), float(r["t_end_s"]))
+                for r in _log_rows(d, "speech.csv") if r["t_start_s"])
+            for t0 in cues:
+                segs = [sg for sg in speech if sg[0] >= t0]
+                if not segs:
+                    continue
+                end = segs[0][1]
+                for s0, s1 in segs[1:]:
+                    if s0 - end <= _DIALOGUE_CHAIN_GAP_S:
+                        end = max(end, s1)
+                    else:
+                        break
+                rec = next((t for t, act in polls
+                            if t >= end and not act), None)
+                if rec is None:
+                    cens += 1
+                    continue
+                rob.append({"pid": pid, "sig": sig,
+                            "dur": max(rec - end, 0.0)})
+    return pd.DataFrame(rob), pd.DataFrame(ctl), cens
+
+
+def table_reengagement(post, qtext, groups):
+    """Post-intervention re-engagement (simplified design 04.09): robot =
+    time from end of the post-intervention dialogue to back-at-threshold;
+    control = observed episode duration. Pooled descriptives plus a
+    paired per-participant-median comparison."""
+    rob, ctl, cens = _post_cue_recovery(groups)
     signame = {"eng": "Engagement", "emo": "Negative affect"}
-    rows1 = []
+    rows = []
     for sig in ("eng", "emo"):
-        r = ep[(ep.sig == sig) & (ep.cond == "Robot")].rec_cue_end.dropna()
-        if len(r):
-            rows1.append(f"{signame[sig]} & {len(r)} & {r.median():.0f} & "
-                         f"{r.quantile(.25):.0f} & {r.quantile(.75):.0f} \\\\")
-    rows2 = []
-    for sig in ("eng", "emo"):
-        sub = gaps[(gaps.sig == sig) & ~gaps.censored]
-        rob = sub[sub.cond == "Robot"]
-        cued, unc = rob[rob.cued].gap, rob[~rob.cued].gap
-        med = sub.groupby(["pid", "cond"]).gap.median().unstack().reindex(
-            columns=["Robot", "Control"])
-        _, p, n = _wilcoxon_cells(med["Robot"], med["Control"])
-        p = p.replace("p = ", "").replace("p < ", "< ")
-        both = med.dropna()
-        cell = (lambda s: f"{s.median():.0f} ({len(s)})" if len(s) else "--")
-        rows2.append(
-            f"{signame[sig]} & {cell(cued)} & {cell(unc)} & "
-            f"{cell(both['Robot']) if len(both) else '--'} & "
-            f"{cell(both['Control']) if len(both) else '--'} & "
-            f"{n} & {p} \\\\")
-    n_cens = int(gaps.censored.sum())
+        r = rob[rob.sig == sig].set_index("pid").dur
+        c = ctl[ctl.sig == sig].set_index("pid").dur
+        mean_r, mean_c = r.groupby(level=0).mean(), c.groupby(level=0).mean()
+        med_r, med_c = (r.groupby(level=0).median(),
+                        c.groupby(level=0).median())
+        # Wilcoxon on per-participant medians (typical case), paired t on
+        # per-participant means (tail-inclusive) — see the table note.
+        _, p, n = _wilcoxon_cells(med_r, med_c)
+        pt = _pairedt_p(mean_r, mean_c)
+        cell = (lambda st: f"{st.mean():.0f} ({st.std(ddof=1):.0f}) "
+                f"[{len(st)}]" if len(st) else "--")
+        rows.append(
+            f"{signame[sig]} & {cell(r)} & {cell(c)} & "
+            f"{mean_r.mean():.0f} & {mean_c.mean():.0f} & "
+            f"{med_r.median():.0f} & {med_c.median():.0f} & {n} & "
+            f"{_pcell(p)} & {pt} \\\\")
+    body = "\n".join(rows)
     tex = f"""\\begingroup\\centering\\footnotesize
-\\subsubsection*{{Time to re-engage after a cue (robot sessions)}}
-\\begin{{tabular}}{{lrrrr}}
+\\setlength{{\\tabcolsep}}{{3pt}}%
+\\begin{{tabular}}{{lccccccccc}}
 \\toprule
-Signal & $n$ & Median (s) & $Q_1$ & $Q_3$ \\\\
+ & \\multicolumn{{2}}{{c}}{{Time below threshold (s), pooled}} &
+   \\multicolumn{{7}}{{c}}{{Per-participant summaries (paired)}} \\\\
+\\cmidrule(lr){{2-3}} \\cmidrule(lr){{4-10}}
+ &  &  & \\multicolumn{{2}}{{c}}{{Mean}} &
+   \\multicolumn{{2}}{{c}}{{Median}} & & & \\\\
+Signal & Robot: after dialogue & No-Robot: full episode &
+  Robot & No-Rob. & Robot & No-Rob. & $n$ & {{$p_W$}} & {{$p_t$}} \\\\
+ & \\multicolumn{{2}}{{c}}{{mean (SD) [count]}} & & & & & & & \\\\
 \\midrule
-{chr(10).join(rows1)}
-\\bottomrule
-\\end{{tabular}}\\par\\vspace{{0.8em}}
-\\subsubsection*{{Engaged gap until the next episode (s)}}
-\\begin{{tabular}}{{lcccccc}}
-\\toprule
- & \\multicolumn{{2}}{{c}}{{Robot, by cue (naive)}} &
-   \\multicolumn{{4}}{{c}}{{Robot vs control (per-participant medians)}} \\\\
-\\cmidrule(lr){{2-3}} \\cmidrule(lr){{4-7}}
-Signal & cued & uncued & Robot & Control & $n$ & $p_W$ \\\\
- & \\multicolumn{{4}}{{c}}{{median (episodes resp.\\ participants)}} & & \\\\
-\\midrule
-{chr(10).join(rows2)}
+{body}
 \\bottomrule
 \\end{{tabular}}\\par\\vspace{{0.4em}}
-\\noindent{{\\small Observed gaps only; {n_cens} gaps are right-censored by
-the session end and excluded. The cued/uncued split inherits the
-immortal-time caveat of the episode analyses and is descriptive only.}}\\par
+\\noindent{{\\small Robot sessions: clock starts when the dialogue
+following an intervention ends (speech chained across gaps below
+{_DIALOGUE_CHAIN_GAP_S:.0f}\\,s); No-Robot sessions: clock starts at
+episode onset. The two clocks therefore start at different points —
+descriptive comparison only. {cens} never-recovered cases censored.
+Durations are right-skewed: $p_W$ is the Wilcoxon over per-participant
+medians (typical episode), $p_t$ the paired $t$ over per-participant
+means (tail-inclusive) — they can disagree, and both are shown.}}\\par
 \\endgroup"""
     return "session_reengagement", tex
 

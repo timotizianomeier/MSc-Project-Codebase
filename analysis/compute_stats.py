@@ -458,12 +458,23 @@ def main() -> None:
         print(f"    TOTAL {g:<8} {tot[g][0]:4d} {tot[g][1]:9d} {tot[g][2]:14d}")
     print("    (replay(0s) validates the replay against the deployed logic)")
 
-    print("\n[10] Post-intervention re-engagement (Nicole 03.09)")
-    print("     Time to re-engage after a cue = rec_cue_end from [9b];")
-    print("     engaged gap = recovery to next same-signal episode start")
-    print("     (observed gaps only, censored counts noted; cued/uncued")
-    print("     split is naive/immortal-time-biased, descriptive only).")
-    from generate_results import _reengagement_gaps
+    print("\n[10] Post-intervention re-engagement (simplified design 04.09)")
+    print("     Robot: time from end of the post-intervention dialogue")
+    print("     (speech chained across <10s gaps) to back-at-threshold;")
+    print("     Control: observed full episode duration. Clocks start at")
+    print("     different points -> descriptive comparison only.")
+    from generate_results import _post_cue_recovery, _reengagement_gaps
+    rob, ctl, cens = _post_cue_recovery(groups)
+    for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
+        r = rob[rob.sig == sig].set_index("pid").dur
+        c = ctl[ctl.sig == sig].set_index("pid").dur
+        print(f"  {signame}: robot after-dialogue md {r.median():.0f}s "
+              f"(n={len(r)}) | control episode md {c.median():.0f}s "
+              f"(n={len(c)})")
+        _paired_tests(r.groupby(level=0).median(),
+                      c.groupby(level=0).median(), "Robot", "Control")
+    print(f"  censored (never recovered): {cens}")
+    print("     Guilt-effect check (gap to next episode), kept for Nicole:")
     gaps = _reengagement_gaps(groups)
     for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
         rce = ep[(ep.sig == sig) & (ep.cond == "Robot")].rec_cue_end.dropna()
