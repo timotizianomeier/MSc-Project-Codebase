@@ -447,7 +447,7 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
     # Session-mean raw signal values over speech-excluded samples
     # (decided 05.09; no-op for no-robot sessions), gate-respecting.
     for sig, label in (("eng", "Mean engagement score"),
-                       ("emo", "Mean neg.-affect share")):
+                       ("emo", "Mean neg.-emotion share")):
         vals = {}
         for (pid, cond), d in sdirs.items():
             if pid not in members or (pid, cond, sig) in gated:
@@ -468,8 +468,8 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
     both_ok = {(pid, cond) for (pid, cond) in sdirs
                if pid in members and not any(
                    (pid, cond, s) in gated for s in ("eng", "emo"))}
-    for sig, label in (("eng", "Eng.\\ episode duration (s)"),
-                       ("emo", "Emo.\\ episode duration (s)"),
+    for sig, label in (("eng", "Diseng.\\ episode duration (s)"),
+                       ("emo", "Neg.-emo.\\ episode duration (s)"),
                        ("any", "Any episode duration (s)")):
         if sig == "any":
             sub = obs[[(p, c) in both_ok
@@ -539,7 +539,11 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
     specs = _sspecs([r[1:] for r in body_rows])
-    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats  # tight bars; fill between groups
+    # quartile variant carries 7 pairs: a slimmer minimum inter-group gap
+    # keeps the extra bar margins inside \textwidth at natural width.
+    gap = "2pt" if quartiles else "5pt"
+    pair_spec = (f"r@{{\\extracolsep{{0pt}}\\,$|$\\,}}"
+                 f"l@{{\\extracolsep{{\\fill}}\\hspace{{{gap}}}}}") * n_stats
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
     body = "\n".join(" & ".join(_scell(c) if i else c
                                 for i, c in enumerate(r)) + " \\\\"
@@ -602,7 +606,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
     specs = _sspecs([r[1:] for r in body_rows])
-    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats  # tight bars; fill between groups
+    pair_spec = "r@{\\extracolsep{0pt}\\,$|$\\,}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * n_stats  # bar-anchored pairs; fill between groups
     heads = " & ".join(f"\\multicolumn{{2}}{{c}}{{{h}}}" for h in stat_heads)
     body = "\n".join(" & ".join(_scell(c2) if i else c2
                                 for i, c2 in enumerate(r)) + " \\\\"
@@ -708,9 +712,9 @@ _DID_FULL_LABELS = {
     "Engagement interv.": "Engagement interventions",
     "Emotion interv.": "Emotion interventions",
     "All interv.": "All interventions",
-    "Mean neg.-affect share": "Mean negative-affect share",
-    "Eng.\\ episode duration (s)": "Engagement episode duration (s)",
-    "Emo.\\ episode duration (s)": "Emotion episode duration (s)",
+    "Mean neg.-emotion share": "Mean negative-emotion share",
+    "Diseng.\\ episode duration (s)": "Disengagement episode duration (s)",
+    "Neg.-emo.\\ episode duration (s)": "Negative-emotion episode duration (s)",
     "Time within eng.\\ threshold (\\%)":
         "Time within engagement threshold (\\%)",
     "Time within emo.\\ threshold (\\%)":
@@ -811,7 +815,7 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
     halves = ((1, 0.0, mid), (2, mid, end))
     rows = {label: {} for label in (
         "Engagement interv.", "Emotion interv.", "All interv.",
-        "Mean engagement score", "Mean neg.-affect share",
+        "Mean engagement score", "Mean neg.-emotion share",
         "Time within eng.\\ threshold (\\%)",
         "Time within emo.\\ threshold (\\%)",
         "Time within both thresholds (\\%)")}
@@ -838,7 +842,7 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
         for sig, csv, col, label in (
                 ("eng", "engagement.csv", "score", "Mean engagement score"),
                 ("emo", "emotion.csv", "negative_share",
-                 "Mean neg.-affect share")):
+                 "Mean neg.-emotion share")):
             if (pid, cond, sig) in gated:
                 continue
             pts = [(float(r["t_session_s"]), float(r[col]))
@@ -867,7 +871,7 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
                 v = quiet_within_pct(d, ("eng", "emo"), excl, lo=lo, hi=hi)
                 if v is not None:
                     rows["Time within both thresholds (\\%)"][(pid, cond, h)] = v
-    decs = {"Mean engagement score": 2, "Mean neg.-affect share": 2,
+    decs = {"Mean engagement score": 2, "Mean neg.-emotion share": 2,
             "Engagement interv.": 0, "Emotion interv.": 0, "All interv.": 0}
     return [(label, vals, decs.get(label, 1))
             for label, vals in rows.items()]
@@ -929,19 +933,19 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
 def table_metrics_halves_adhd(post, qtext, groups):
     """Thesis appendix: session halves, ADHD participants."""
     return "session_metrics_halves_adhd", _render_halves_table(
-        groups, GROUP_ADHD, size="\\scriptsize", colsep="1pt")
+        groups, GROUP_ADHD, size="\\scriptsize", colsep="0.7pt")
 
 
 def table_metrics_halves_noadhd(post, qtext, groups):
     """Thesis appendix: session halves, No-ADHD participants."""
     return "session_metrics_halves_noadhd", _render_halves_table(
-        groups, GROUP_CONTROL, size="\\scriptsize", colsep="1pt")
+        groups, GROUP_CONTROL, size="\\scriptsize", colsep="0.7pt")
 
 
 def table_metrics_halves_all(post, qtext, groups):
     """Thesis appendix: session halves, all participants."""
     return "session_metrics_halves_all", _render_halves_table(
-        groups, None, size="\\scriptsize", colsep="1pt")
+        groups, None, size="\\scriptsize", colsep="0.7pt")
 
 
 def _pooled_rows(groups):
@@ -1007,7 +1011,13 @@ def _render_within_scopes_table(groups, *, size, colsep) -> str:
                         + [_scell(str(n)), _pcell(p), _pairedt_p(r, c)])
         blocks.append((_DID_FULL_LABELS.get(label, label), rows))
     specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
-    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * 5
+    # pair halves are S columns (decimal-aligned) with a thin-space
+    # margin around the bar; \extracolsep zeroed inside the bar boundary
+    # and restored after so the fill only stretches between stat groups.
+    pair_spec = "".join(
+        f"{sl}@{{\\extracolsep{{0pt}}\\,$|$\\,}}{sr}"
+        "@{\\extracolsep{\\fill}\\hspace{5pt}}"
+        for sl, sr in zip(specs[0:10:2], specs[1:10:2]))
     ncols = 15
     lines = []
     for bi, (label, rows) in enumerate(blocks):
@@ -1074,7 +1084,11 @@ def _render_between_scopes_table(groups, *, size, colsep) -> str:
                            _welch_p(a, c)])
         blocks.append((_DID_FULL_LABELS.get(label, label), rows))
     specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
-    pair_spec = "r@{\\extracolsep{0pt}$|$}l@{\\extracolsep{\\fill}\\hspace{5pt}}" * 5
+    # decimal-aligned pair halves, thin-space bar margin (see within table)
+    pair_spec = "".join(
+        f"{sl}@{{\\extracolsep{{0pt}}\\,$|$\\,}}{sr}"
+        "@{\\extracolsep{\\fill}\\hspace{5pt}}"
+        for sl, sr in zip(specs[0:10:2], specs[1:10:2]))
     ncols = 15
     lines = []
     for bi, (label, rows) in enumerate(blocks):
@@ -1407,7 +1421,7 @@ def table_reengagement(post, qtext, groups):
     control = observed episode duration. Pooled descriptives plus a
     paired per-participant-median comparison."""
     rob, ctl, cens = _post_cue_recovery(groups)
-    signame = {"eng": "Engagement", "emo": "Negative affect"}
+    signame = {"eng": "Engagement", "emo": "Negative emotion"}
     rows = []
     for sig in ("eng", "emo"):
         r = rob[rob.sig == sig].set_index("pid").dur
@@ -1428,7 +1442,7 @@ def table_reengagement(post, qtext, groups):
             f"{_pcell(p)} & {pt} \\\\")
     body = "\n".join(rows)
     tex = f"""\\begingroup\\centering\\footnotesize
-\\setlength{{\\tabcolsep}}{{3pt}}%
+\\setlength{{\\tabcolsep}}{{1.5pt}}%
 \\begin{{tabular}}{{lccccccccc}}
 \\toprule
  & \\multicolumn{{2}}{{c}}{{Time below threshold (s), pooled}} &

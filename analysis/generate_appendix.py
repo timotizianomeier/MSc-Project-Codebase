@@ -1656,7 +1656,7 @@ def gate_note(groups: dict, sdirs: dict) -> str:
     gated = gated_signals(sdirs)
     items = [f"P{disp_pid(pid)} "
              f"{'robot' if cond == 'Robot' else 'no-robot'} session "
-             f"{'engagement' if sig == 'eng' else 'negative affect'} "
+             f"{'engagement' if sig == 'eng' else 'negative emotion'} "
              f"({100 * cov:.0f}\\%)"
              for (pid, cond, sig), cov in sorted(
                  gated.items(), key=lambda kv: (int(kv[0][0]), kv[0][1]))
@@ -2136,7 +2136,7 @@ def _scatter_chart(df: pd.DataFrame, groups: dict, *, xlabel: str,
 
 def _episode_table(ep: pd.DataFrame) -> str:
     rows = []
-    for sig, signame in (("eng", "Engagement"), ("emo", "Negative affect")):
+    for sig, signame in (("eng", "Engagement"), ("emo", "Negative emotion")):
         for cond in ("Robot", "Control"):
             sub = ep[(ep.sig == sig) & (ep.cond == cond)]
             s = sub.dur.dropna()
@@ -2573,7 +2573,7 @@ def build_session_stats(groups: dict[str, str]) -> str:
     out.append(_episode_table(ep))
 
     lm_rows, naive_txt = [], []
-    for sig, signame in (("eng", "Engagement"), ("emo", "Negative affect")):
+    for sig, signame in (("eng", "Engagement"), ("emo", "Negative emotion")):
         sub = ep[(ep.sig == sig) & (ep.cond == "Robot")]
         cued, supd = sub[sub.cued].dur.dropna(), sub[~sub.cued].dur.dropna()
         if len(cued) and len(supd):
@@ -2622,7 +2622,7 @@ Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), med
     cc_rows = []
     dur_cols, pct_cols = [], []
     for sig, signame, short in (("eng", "Engagement", "Engagement"),
-                                ("emo", "Negative affect", "Negative\\\\affect")):
+                                ("emo", "Negative emotion", "Negative\\\\emotion")):
         sub = ep[ep.sig == sig]
         med = (sub.dropna(subset=["dur"])
                .groupby(["pid", "cond"]).dur.median().unstack())
@@ -2785,7 +2785,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      lambda r: _float_or_none(r, "score"),
                      lambda r: _float_or_none(r, "average"),
                      0.80, {"intervention_engagement_sent"}, "ApxTrigEng"))
-    sub("Negative-affect scores (robot sessions)",
+    sub("Negative-emotion scores (robot sessions)",
         legend_score.format(thr="0.60",
                             color="\\textcolor{ApxTrigEmo}{green}",
                             what="delivered emotion interventions"),
@@ -2802,7 +2802,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      lambda r: _float_or_none(r, "score"),
                      lambda r: _float_or_none(r, "average"),
                      0.80, {"counterfactual_engagement"}, "ApxTrigEng"))
-    sub("Negative-affect scores (no-robot sessions)",
+    sub("Negative-emotion scores (no-robot sessions)",
         legend_score.format(thr="0.60",
                             color="\\textcolor{ApxTrigEmo}{green}",
                             what="counterfactual emotion interventions "
