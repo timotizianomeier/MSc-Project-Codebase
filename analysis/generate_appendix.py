@@ -2390,7 +2390,7 @@ Robot-session metric & Spearman $\\rho$ & $p$ & $n$ \\\\
                                        "(robot $-$ control)",
                                 hline=0)
                + "\n\\end{center}\n"
-               "\\noindent{\\small The strongest (still non-significant) "
+               "\\noindent{\\small The strongest "
                "of the seven correlations. Dashed line: no difference "
                "between conditions. \\textcolor{ApxADHD}"
                "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"

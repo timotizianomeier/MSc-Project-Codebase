@@ -31,12 +31,13 @@ import sys
 from datetime import datetime
 
 import pandas as pd
+from scipy import stats as sps
 
 from generate_appendix import (
     FILE_PATTERNS, GROUP_ADHD, GROUP_CONTROL, GROUPS_FILE,  # noqa: F401
     assign_groups, clean, esc, load_qualtrics, newest_file, strip_stem,
     to_rank,
-    _ROBOT_METRICS, _metric_series, _mwu_cells, _wilcoxon_cells,
+    _ROBOT_METRICS, _fmt_p, _metric_series, _mwu_cells, _wilcoxon_cells,
     _read_rows as _log_rows,
     session_dirs, session_metrics,
     EPISODE_CENSOR_GAP_S, SESSION_MAX_MIN, episode_records,
@@ -272,6 +273,23 @@ def _pcell(p: str) -> str:
     return _scell(p)
 
 
+def _welch_p(a: pd.Series, c: pd.Series) -> str:
+    """Welch t-test p as an S-ready cell (Nicole 03.09: t sanity twins)."""
+    a, c = a.dropna(), c.dropna()
+    if len(a) < 2 or len(c) < 2:
+        return "{--}"
+    return _pcell(_fmt_p(sps.ttest_ind(a, c, equal_var=False).pvalue))
+
+
+def _pairedt_p(a: pd.Series, b: pd.Series) -> str:
+    """Paired t-test p as an S-ready cell (aligned on index)."""
+    both = pd.concat([a, b], axis=1).dropna()
+    if len(both) < 3:
+        return "{--}"
+    return _pcell(_fmt_p(
+        sps.ttest_rel(both.iloc[:, 0], both.iloc[:, 1]).pvalue))
+
+
 def _sspecs(matrix: list[list[str]]) -> list[str]:
     """Per-column S[table-format=...] specs from formatted cell strings
     (matrix is row-major, label column excluded)."""
@@ -328,7 +346,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
         _, p = _mwu_cells(s_a, s_c)
         rows.append([esc(_SHORT_METRIC_LABELS.get(label, label))]
                     + [_fmt_v(x, d) for a, c, d in stats_ for x in (a, c)]
-                    + [_pcell(p)])
+                    + [_pcell(p), _welch_p(s_a, s_c)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
@@ -343,11 +361,12 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
                      for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
- & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} & {{MWU}} \\\\
-\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 2}}}
- & {heads} & {{$p$}} \\\\
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,Control}} &
+   \\multicolumn{{2}}{{c}}{{$p$}} \\\\
+\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
+ & {heads} & {{MWU}} & {{$t$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -357,7 +376,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
 def table_session_metrics(post, qtext, groups):
     """Thesis version: full seven-stat spread including the quartiles."""
     return "session_metrics_robot", _render_session_metrics_table(
-        groups, quartiles=True, size="\\footnotesize", colsep="2.5pt")
+        groups, quartiles=False, size="\\footnotesize", colsep="2pt")
 
 
 def table_session_metrics_col(post, qtext, groups):
@@ -512,7 +531,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
             [label]
             + [_fmt_v(x, d).replace("100.0", "100")
                for a, b, d in stats_ for x in (a, b)]
-            + [str(n), _pcell(p)])
+            + [str(n), _pcell(p), _pairedt_p(r, c)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
@@ -524,12 +543,12 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-3]}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,Control}} &
-   \\multicolumn{{2}}{{c}}{{Wilcoxon}} \\\\
-\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
- & {heads} & {{$n$}} & {{$p$}} \\\\
+   \\multicolumn{{3}}{{c}}{{Within-subject}} \\\\
+\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 4}}}
+ & {heads} & {{$n$}} & {{$p_W$}} & {{$p_t$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -575,7 +594,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
             [label]
             + [_fmt_v(v, d).replace("100.0", "100")
                for x, y, d in stats_ for v in (x, y)]
-            + [f"{len(a)}$|${len(c)}", _pcell(p)])
+            + [f"{len(a)}$|${len(c)}", _pcell(p), _welch_p(a, c)])
     stat_heads = (["Min", "$Q_1$", "Mean", "Median", "$Q_3$", "Max", "SD"]
                   if quartiles else ["Min", "Mean", "Median", "Max", "SD"])
     n_stats = len(stat_heads)
@@ -587,12 +606,12 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{{header}}} &
-   \\multicolumn{{2}}{{c}}{{MWU}} \\\\
-\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 3}}}
- & {heads} & $n$ & {{$p$}} \\\\
+   \\multicolumn{{3}}{{c}}{{Between groups}} \\\\
+\\cmidrule(lr){{2-{2 * n_stats + 1}}} \\cmidrule(lr){{{2 * n_stats + 2}-{2 * n_stats + 4}}}
+ & {heads} & $n$ & {{$p_U$}} & {{$p_t$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -712,15 +731,16 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
         cells = []
         for sel in (is_a, ~is_a):
             sub = df.loc[sel]
-            cells += [_fmt_v(sub[c].dropna().mean(), dd)
+            cells += [_scell(_fmt_v(sub[c].dropna().mean(), dd))
                       for c in ("Robot", "Control")]
-            _, p_w, _ = _wilcoxon_cells(sub["Robot"], sub["Control"])
-            cells.append(p_w)
-        for s in (df["Robot"], df["Control"], delta):
-            _, p_u = _mwu_cells(s[is_a], s[~is_a])
-            cells.append(p_u)
-        cells = [_pcell(c) if i in (2, 5, 6, 7, 8) else _scell(c)
-                 for i, c in enumerate(cells)]
+            _, p_w, n_w = _wilcoxon_cells(sub["Robot"], sub["Control"])
+            cells += [_scell(str(n_w)), _pcell(p_w),
+                      _pairedt_p(sub["Robot"], sub["Control"])]
+        for ser in (df["Robot"], df["Control"], delta):
+            _, p_u = _mwu_cells(ser[is_a], ser[~is_a])
+            cells += [_pcell(p_u), _welch_p(ser[is_a], ser[~is_a])]
+        # MWU ns equal the per-condition value counts (visible in the
+        # by-group tables); only the paired-Wilcoxon ns are shown here.
         if full_width:
             label = _DID_FULL_LABELS.get(label, label)
         body_rows.append([label] + cells)
@@ -728,7 +748,9 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
     norob = "No-Robot" if full_width else "No-rob."
     if full_width:
-        env, env_arg = "tabular*", "{\\textwidth}"
+        # landscape (decided 04.09): the thesis wraps this in a
+        # sidewaystable (rotating pkg), so the target width is \textheight
+        env, env_arg = "tabular*", "{\\textheight}"
         colspec = ("@{}l@{\\extracolsep{\\fill}}" + "".join(specs) + "@{}")
     else:
         env, env_arg = "tabular", ""
@@ -737,11 +759,16 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\begin{{{env}}}{env_arg}{{{colspec}}}
 \\toprule
- & \\multicolumn{{3}}{{c}}{{ADHD}} & \\multicolumn{{3}}{{c}}{{No-ADHD}} &
-   \\multicolumn{{3}}{{c}}{{Mann-Whitney $p$}} \\\\
-\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
- & {_sheads(["Robot", norob, "$p_W$", "Robot", norob, "$p_W$",
-             "Robot", norob, "$\\Delta$"])} \\\\
+ & \\multicolumn{{5}}{{c}}{{ADHD (within)}} &
+   \\multicolumn{{5}}{{c}}{{No-ADHD (within)}} &
+   \\multicolumn{{6}}{{c}}{{Between groups}} \\\\
+\\cmidrule(lr){{2-6}} \\cmidrule(lr){{7-11}} \\cmidrule(lr){{12-17}}
+ &  &  &  &  &  &  &  &  &  &  & \\multicolumn{{2}}{{c}}{{Robot}} &
+   \\multicolumn{{2}}{{c}}{{{norob}}} &
+   \\multicolumn{{2}}{{c}}{{$\\Delta$}} \\\\
+ & {_sheads(["Robot", norob, "$n$", "$p_W$", "$p_t$", "Robot", norob,
+             "$n$", "$p_W$", "$p_t$", "$p_U$", "$p_t$", "$p_U$", "$p_t$",
+             "$p_U$", "$p_t$"])} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -751,7 +778,7 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
 def table_metrics_did(post, qtext, groups):
     """Thesis version of the consolidated factorial (DiD) summary."""
     return "session_metrics_did", _render_did_table(
-        groups, size="\\footnotesize", colsep="2pt", full_width=True)
+        groups, size="\\footnotesize", colsep="1pt", full_width=True)
 
 
 def table_metrics_did_col(post, qtext, groups):
@@ -871,20 +898,18 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
         cells = []
         for h in (1, 2):
             r, c = ser[("Robot", h)], ser[("Control", h)]
-            cells += [_fmt_v(r.mean() if len(r) else None, dd),
-                      _fmt_v(c.mean() if len(c) else None, dd)]
-            _, p, _ = _wilcoxon_cells(r, c)
-            cells.append(p)
+            cells += [_scell(_fmt_v(r.mean() if len(r) else None, dd)),
+                      _scell(_fmt_v(c.mean() if len(c) else None, dd))]
+            _, p, n = _wilcoxon_cells(r, c)
+            cells += [_pcell(p), _pairedt_p(r, c)]
         for a, b in ((ser[("Robot", 1)], ser[("Robot", 2)]),
                      (ser[("Control", 1)], ser[("Control", 2)])):
             _, p, _ = _wilcoxon_cells(a, b)
-            cells.append(p)
+            cells += [_pcell(p), _pairedt_p(a, b)]
         dr = ser[("Robot", 2)] - ser[("Robot", 1)]
         dc = ser[("Control", 2)] - ser[("Control", 1)]
-        _, p, _ = _wilcoxon_cells(dr, dc)
-        cells.append(p)
-        cells = [_pcell(x) if i in (2, 5, 6, 7, 8) else _scell(x)
-                 for i, x in enumerate(cells)]
+        _, p, n = _wilcoxon_cells(dr, dc)
+        cells += [_pcell(p), _pairedt_p(dr, dc), _scell(str(n))]
         body_rows.append([label] + cells)
     specs = _sspecs([r[1:] for r in body_rows])
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
@@ -892,12 +917,16 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{"".join(specs)}@{{}}}}
 \\toprule
- & \\multicolumn{{3}}{{c}}{{First half}} &
-   \\multicolumn{{3}}{{c}}{{Second half}} &
-   \\multicolumn{{3}}{{c}}{{Wilcoxon $p$ (1st vs 2nd)}} \\\\
-\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
- & {_sheads(["Robot", "No-rob.", "$p_W$", "Robot", "No-rob.", "$p_W$",
-             "Robot", "No-rob.", "$\\Delta$"])} \\\\
+ & \\multicolumn{{4}}{{c}}{{First half}} &
+   \\multicolumn{{4}}{{c}}{{Second half}} &
+   \\multicolumn{{7}}{{c}}{{1st vs 2nd (within-subject)}} \\\\
+\\cmidrule(lr){{2-5}} \\cmidrule(lr){{6-9}} \\cmidrule(lr){{10-16}}
+ &  &  &  &  &  &  &  &  & \\multicolumn{{2}}{{c}}{{Robot}} &
+   \\multicolumn{{2}}{{c}}{{No-rob.}} &
+   \\multicolumn{{2}}{{c}}{{$\\Delta$}} &  \\\\
+ & {_sheads(["Robot", "No-rob.", "$p_W$", "$p_t$", "Robot",
+             "No-rob.", "$p_W$", "$p_t$", "$p_W$", "$p_t$",
+             "$p_W$", "$p_t$", "$p_W$", "$p_t$", "$n$"])} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -907,19 +936,244 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
 def table_metrics_halves_adhd(post, qtext, groups):
     """Thesis appendix: session halves, ADHD participants."""
     return "session_metrics_halves_adhd", _render_halves_table(
-        groups, GROUP_ADHD, size="\\footnotesize", colsep="3pt")
+        groups, GROUP_ADHD, size="\\scriptsize", colsep="1pt")
 
 
 def table_metrics_halves_noadhd(post, qtext, groups):
     """Thesis appendix: session halves, No-ADHD participants."""
     return "session_metrics_halves_noadhd", _render_halves_table(
-        groups, GROUP_CONTROL, size="\\footnotesize", colsep="3pt")
+        groups, GROUP_CONTROL, size="\\scriptsize", colsep="1pt")
 
 
 def table_metrics_halves_all(post, qtext, groups):
     """Thesis appendix: session halves, all participants."""
     return "session_metrics_halves_all", _render_halves_table(
-        groups, None, size="\\footnotesize", colsep="3pt")
+        groups, None, size="\\scriptsize", colsep="1pt")
+
+
+def _pooled_rows(groups):
+    """Per-participant mean across both conditions for every metric row
+    (Nicole 03.09: ADHD-vs-control 'independent of condition'). A
+    participant with one gated signal-session contributes the other
+    session's value alone (mean skips NaN)."""
+    return [(label, df.mean(axis=1), dec)
+            for label, df, dec in _cross_condition_rows(groups)]
+
+
+def table_metrics_all(post, qtext, groups):
+    """Thesis: robot vs control paired over ALL participants (Nicole
+    03.09: 'the robot might help anyone')."""
+    return "session_metrics_all", _render_cross_table(
+        groups, None, quartiles=True, size="\\scriptsize",
+        colsep="1.5pt")
+
+
+def table_metrics_all_col(post, qtext, groups):
+    """HRI-sized variant of the all-participants cross table."""
+    return "session_metrics_all_col", _render_cross_table(
+        groups, None, quartiles=False, size="\\scriptsize", colsep="3pt")
+
+
+def table_metrics_pooled_by_group(post, qtext, groups):
+    """Thesis: ADHD vs control on per-participant means pooled across
+    both conditions."""
+    return "session_metrics_pooled_by_group", _render_group_stats_table(
+        _pooled_rows(groups), groups,
+        header="ADHD\\,$|$\\,Control (conditions pooled)", quartiles=False,
+        size="\\footnotesize", colsep="3pt")
+
+
+def table_metrics_halves_pooled(post, qtext, groups):
+    """Thesis appendix: first vs second half pooled over conditions AND
+    groups (Nicole/outline 04.09) — per participant and half, the mean of
+    the robot and control values; paired 1st-vs-2nd across all 22."""
+    body_rows = []
+    for label, vals, dec in _half_split_rows(groups, set(groups)):
+        dd = max(dec, 1)
+        halves = {}
+        for h in (1, 2):
+            sub = pd.Series({(pid, cond): v
+                             for (pid, cond, hh), v in vals.items()
+                             if hh == h})
+            halves[h] = sub.groupby(level=0).mean() if len(sub) else \
+                pd.Series(dtype=float)
+        h1, h2 = halves[1], halves[2]
+        _, p, n = _wilcoxon_cells(h1, h2)
+        body_rows.append([
+            label,
+            _scell(_fmt_v(h1.mean() if len(h1) else None, dd)),
+            _scell(_fmt_v(h2.mean() if len(h2) else None, dd)),
+            _scell(str(n)), _pcell(p), _pairedt_p(h1, h2)])
+    specs = _sspecs([r[1:] for r in body_rows])
+    body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
+    tex = f"""\\begingroup\\centering\\footnotesize
+\\setlength{{\\tabcolsep}}{{4pt}}%
+\\begin{{tabular}}{{l{"".join(specs)}}}
+\\toprule
+ & \\multicolumn{{2}}{{c}}{{Mean (all participants)}} &
+   \\multicolumn{{3}}{{c}}{{1st vs 2nd (within)}} \\\\
+\\cmidrule(lr){{2-3}} \\cmidrule(lr){{4-6}}
+ & {{First half}} & {{Second half}} & {{$n$}} & {{$p_W$}} & {{$p_t$}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+    return "session_metrics_halves_pooled", tex
+
+
+def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
+    """Companion stats table to the feature-means chart: per Likert item
+    the group means with MWU and Welch-t p (Nicole 03.09: t twins)."""
+    body_rows = []
+    for title, prefix, n_items in FEATURE_BLOCKS:
+        body_rows.append([f"\\multicolumn{{6}}{{l}}{{\\textbf{{{title}}}}}"])
+        for i in range(1, n_items + 1):
+            col = f"{prefix}{i}"
+            if col not in post.columns:
+                continue
+            v = to_rank(post[col], "LIKERT5")
+            pids_a = [p for p, g in groups.items() if g == GROUP_ADHD]
+            a = v[post["PID"].isin(pids_a)]
+            c = v[~post["PID"].isin(pids_a)]
+            _, p_u = _mwu_cells(a, c)
+            body_rows.append([
+                "\\quad " + esc(SHORT_LABELS.get(
+                    col, strip_stem(qtext.get(col, col)))),
+                _scell(f"{a.mean():.2f}"), _scell(f"{c.mean():.2f}"),
+                _scell(f"{a.dropna().size}$|${c.dropna().size}"),
+                _pcell(p_u), _welch_p(a, c)])
+    specs = _sspecs([r[1:] for r in body_rows if len(r) > 1])
+    body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
+    return f"""\\begingroup\\centering{size}
+\\setlength{{\\tabcolsep}}{{{colsep}}}%
+\\begin{{tabular}}{{l{specs[0]}{specs[1]}c{specs[3]}{specs[4]}}}
+\\toprule
+ & \\multicolumn{{2}}{{c}}{{Mean}} & & \\multicolumn{{2}}{{c}}{{$p$}} \\\\
+\\cmidrule(lr){{2-3}} \\cmidrule(lr){{5-6}}
+ & {{ADHD}} & {{Control}} & $n$ & {{MWU}} & {{$t$}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular}}\\par\\endgroup"""
+
+
+def table_feature_stats(post, qtext, groups):
+    """Thesis companion table to the feature-means chart."""
+    return "feature_stats", _render_feature_stats(
+        post, qtext, groups, size="\\footnotesize", colsep="4pt")
+
+
+def table_feature_stats_col(post, qtext, groups):
+    """HRI-sized variant of the feature stats table."""
+    return "feature_stats_col", _render_feature_stats(
+        post, qtext, groups, size="\\scriptsize", colsep="3pt")
+
+
+def table_metrics_pooled_by_group_col(post, qtext, groups):
+    """HRI-sized variant of the pooled group table."""
+    return "session_metrics_pooled_by_group_col", _render_group_stats_table(
+        _pooled_rows(groups), groups,
+        header="ADHD\\,$|$\\,Control (conditions pooled)", quartiles=False,
+        size="\\scriptsize", colsep="3pt")
+
+
+def _reengagement_gaps(groups) -> pd.DataFrame:
+    """Post-recovery engaged gaps (Nicole 03.09, 'guilt effect'): for
+    every episode with an observed recovery, the time until the same
+    signal's next episode starts (or until the last poll = right-censored
+    at session end). Cue attribution matches episode_records (same event
+    kinds, same -5s tolerance); the coverage gate applies."""
+    sdirs = session_dirs()
+    gated = gated_signals(sdirs)
+    recs = []
+    for (pid, cond), d in sdirs.items():
+        if pid not in groups:
+            continue
+        events = _log_rows(d, "events.csv")
+        for sig in ("eng", "emo"):
+            if (pid, cond, sig) in gated:
+                continue
+            polls = signal_polls(d, sig)
+            eps = extract_episodes(polls)
+            if not polls or not eps:
+                continue
+            base = "engagement" if sig == "eng" else "emotion"
+            kind = (f"intervention_{base}" if cond == "Robot"
+                    else f"counterfactual_{base}")
+            cues = [float(r["t_session_s"]) for r in events
+                    if r["event_type"] == kind and r["t_session_s"]]
+            t_last = polls[-1][0]
+            for i, e in enumerate(eps):
+                if e["t1"] is None:
+                    continue
+                cued = any(e["t0"] - 5 <= t <= e["t1"] for t in cues)
+                nxt = eps[i + 1]["t0"] if i + 1 < len(eps) else None
+                recs.append({
+                    "pid": pid, "cond": cond, "sig": sig, "cued": cued,
+                    "gap": (nxt if nxt is not None else t_last) - e["t1"],
+                    "censored": nxt is None,
+                })
+    return pd.DataFrame(recs)
+
+
+def table_reengagement(post, qtext, groups):
+    """Post-intervention re-engagement table (thesis appendix): time to
+    re-engage after a cue (from episode_records' rec_cue_end) and the
+    engaged gap until the next episode, cued vs uncued (naive, noted)
+    and robot vs control (paired per participant, Wilcoxon)."""
+    sdirs = session_dirs()
+    ep, _ = episode_records(groups, sdirs)
+    gaps = _reengagement_gaps(groups)
+    signame = {"eng": "Engagement", "emo": "Negative affect"}
+    rows1 = []
+    for sig in ("eng", "emo"):
+        r = ep[(ep.sig == sig) & (ep.cond == "Robot")].rec_cue_end.dropna()
+        if len(r):
+            rows1.append(f"{signame[sig]} & {len(r)} & {r.median():.0f} & "
+                         f"{r.quantile(.25):.0f} & {r.quantile(.75):.0f} \\\\")
+    rows2 = []
+    for sig in ("eng", "emo"):
+        sub = gaps[(gaps.sig == sig) & ~gaps.censored]
+        rob = sub[sub.cond == "Robot"]
+        cued, unc = rob[rob.cued].gap, rob[~rob.cued].gap
+        med = sub.groupby(["pid", "cond"]).gap.median().unstack().reindex(
+            columns=["Robot", "Control"])
+        _, p, n = _wilcoxon_cells(med["Robot"], med["Control"])
+        p = p.replace("p = ", "").replace("p < ", "< ")
+        both = med.dropna()
+        cell = (lambda s: f"{s.median():.0f} ({len(s)})" if len(s) else "--")
+        rows2.append(
+            f"{signame[sig]} & {cell(cued)} & {cell(unc)} & "
+            f"{cell(both['Robot']) if len(both) else '--'} & "
+            f"{cell(both['Control']) if len(both) else '--'} & "
+            f"{n} & {p} \\\\")
+    n_cens = int(gaps.censored.sum())
+    tex = f"""\\begingroup\\centering\\footnotesize
+\\subsubsection*{{Time to re-engage after a cue (robot sessions)}}
+\\begin{{tabular}}{{lrrrr}}
+\\toprule
+Signal & $n$ & Median (s) & $Q_1$ & $Q_3$ \\\\
+\\midrule
+{chr(10).join(rows1)}
+\\bottomrule
+\\end{{tabular}}\\par\\vspace{{0.8em}}
+\\subsubsection*{{Engaged gap until the next episode (s)}}
+\\begin{{tabular}}{{lcccccc}}
+\\toprule
+ & \\multicolumn{{2}}{{c}}{{Robot, by cue (naive)}} &
+   \\multicolumn{{4}}{{c}}{{Robot vs control (per-participant medians)}} \\\\
+\\cmidrule(lr){{2-3}} \\cmidrule(lr){{4-7}}
+Signal & cued & uncued & Robot & Control & $n$ & $p_W$ \\\\
+ & \\multicolumn{{4}}{{c}}{{median (episodes resp.\\ participants)}} & & \\\\
+\\midrule
+{chr(10).join(rows2)}
+\\bottomrule
+\\end{{tabular}}\\par\\vspace{{0.4em}}
+\\noindent{{\\small Observed gaps only; {n_cens} gaps are right-censored by
+the session end and excluded. The cued/uncued split inherits the
+immortal-time caveat of the episode analyses and is descriptive only.}}\\par
+\\endgroup"""
+    return "session_reengagement", tex
 
 
 # Improvement suggestions of ADHD participants, O'Connell-style. This is
@@ -1001,6 +1255,12 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_did, table_metrics_did_col,
                   table_metrics_halves_adhd, table_metrics_halves_noadhd,
                   table_metrics_halves_all,
+                  table_metrics_all, table_metrics_all_col,
+                  table_metrics_pooled_by_group,
+                  table_metrics_pooled_by_group_col,
+                  table_reengagement,
+                  table_metrics_halves_pooled,
+                  table_feature_stats, table_feature_stats_col,
                   table_suggestions, table_suggestions_col]
 
 
@@ -1055,6 +1315,10 @@ THESIS_ONLY_FRAGMENTS = {
     "session_metrics_delta_by_group", "session_metrics_delta_by_group_col",
     "session_metrics_halves_adhd", "session_metrics_halves_noadhd",
     "session_metrics_halves_all",
+    "session_metrics_all", "session_metrics_all_col",
+    "session_metrics_pooled_by_group", "session_metrics_pooled_by_group_col",
+    "session_reengagement",
+    "session_metrics_halves_pooled",
     "results_preview",
 }
 

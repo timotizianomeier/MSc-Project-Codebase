@@ -86,6 +86,8 @@ def _mwu(adhd: pd.Series, ctrl: pd.Series, what: str) -> None:
     u = stats.mannwhitneyu(a, c, alternative="two-sided")
     print(f"    Mann-Whitney U ADHD vs Control ({what}): U={u.statistic:.1f}, "
           f"p={u.pvalue:.3f} (ADHD mean {a.mean():.2f} vs Control {c.mean():.2f})")
+    t = stats.ttest_ind(a, c, equal_var=False)  # Welch t, sanity reference
+    print(f"    Welch t (reference): t={t.statistic:.2f}, p={t.pvalue:.3f}")
 
 
 def _by_group(df: pd.DataFrame, groups: dict, series: pd.Series):
@@ -455,6 +457,30 @@ def main() -> None:
     for g in ("Overall", GROUP_ADHD, GROUP_CONTROL):
         print(f"    TOTAL {g:<8} {tot[g][0]:4d} {tot[g][1]:9d} {tot[g][2]:14d}")
     print("    (replay(0s) validates the replay against the deployed logic)")
+
+    print("\n[10] Post-intervention re-engagement (Nicole 03.09)")
+    print("     Time to re-engage after a cue = rec_cue_end from [9b];")
+    print("     engaged gap = recovery to next same-signal episode start")
+    print("     (observed gaps only, censored counts noted; cued/uncued")
+    print("     split is naive/immortal-time-biased, descriptive only).")
+    from generate_results import _reengagement_gaps
+    gaps = _reengagement_gaps(groups)
+    for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
+        rce = ep[(ep.sig == sig) & (ep.cond == "Robot")].rec_cue_end.dropna()
+        if len(rce):
+            print(f"  {signame}: re-engage after cue (robot) n={len(rce)} "
+                  f"median {rce.median():.0f}s "
+                  f"[{rce.quantile(.25):.0f}; {rce.quantile(.75):.0f}]")
+        sub = gaps[(gaps.sig == sig) & ~gaps.censored]
+        rob = sub[sub.cond == "Robot"]
+        print(f"  {signame}: gap to next episode — robot cued "
+              f"md {rob[rob.cued].gap.median():.0f}s (n={rob.cued.sum()}) | "
+              f"uncued md {rob[~rob.cued].gap.median():.0f}s "
+              f"(n={(~rob.cued).sum()})   [naive]")
+        med = sub.groupby(["pid", "cond"]).gap.median().unstack().reindex(
+            columns=["Robot", "Control"])
+        _paired_tests(med["Robot"], med["Control"], "Robot", "Control")
+    print(f"  censored gaps excluded: {int(gaps.censored.sum())}")
 
     print("\nDone. Carry values over manually; nothing was written anywhere.")
 
