@@ -42,6 +42,7 @@ from generate_appendix import (
     session_dirs, session_metrics,
     EPISODE_CENSOR_GAP_S, SESSION_MAX_MIN, episode_records,
     extract_episodes, gated_signals, signal_polls,
+    quiet_signal_mean, quiet_within_pct, speech_exclusions,
 )
 
 # ============================================================================
@@ -443,21 +444,17 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
             for cond in ("Robot", "Control")})
         rows.append((label, df, 0))
 
-    # Session-mean raw signal values (engagement `score`, emotion
-    # `negative_share`), gate-respecting like every signal-level row.
-    for sig, csv, col, label in (
-            ("eng", "engagement.csv", "score", "Mean engagement score"),
-            ("emo", "emotion.csv", "negative_share",
-             "Mean neg.-affect share")):
+    # Session-mean raw signal values over speech-excluded samples
+    # (decided 05.09; no-op for no-robot sessions), gate-respecting.
+    for sig, label in (("eng", "Mean engagement score"),
+                       ("emo", "Mean neg.-affect share")):
         vals = {}
         for (pid, cond), d in sdirs.items():
             if pid not in members or (pid, cond, sig) in gated:
                 continue
-            xs = [float(r[col]) for r in _log_rows(d, csv)
-                  if r.get(col) and r.get("t_session_s")
-                  and float(r["t_session_s"]) >= 0]
-            if xs:
-                vals[(pid, cond)] = sum(xs) / len(xs)
+            v = quiet_signal_mean(d, sig)
+            if v is not None:
+                vals[(pid, cond)] = v
         df = pd.Series(vals).unstack().reindex(
             columns=["Robot", "Control"])
         rows.append((label, df, 2))
@@ -483,35 +480,24 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
         med = med.reindex(columns=["Robot", "Control"])
         rows.append((label, med, 1))
 
+    # %-within-threshold rows over the speech-excluded timeline (exact
+    # subtraction; decided 05.09 — see quiet_within_pct). Gate applies
+    # per (session, signal); 'both' needs both signals ungated.
     within = {}  # sig -> {(pid, cond): % within threshold}
-    below_time = ep.assign(bt=ep.dur.fillna(ep.low_bound)).groupby(
-        ["pid", "cond", "sig"]).bt.sum()
-    for (pid, cond, sig), span in spans.items():
+    for (pid, cond), d in sdirs.items():
         if pid not in members:
             continue
-        bt = below_time.get((pid, cond, sig), 0.0)
-        within.setdefault(sig, {})[(pid, cond)] = 100.0 * (1 - bt / span)
-
-    # 'both' = time in no below-threshold episode of either signal, over
-    # the merged two-signal poll timeline (gaps clamped like the
-    # per-signal spans); needs both signals to pass the coverage gate.
-    for (pid, cond), d in sdirs.items():
-        if (pid, cond) not in both_ok:
-            continue
-        times, intervals = [], []
+        excl = speech_exclusions(d)
         for sig in ("eng", "emo"):
-            polls = signal_polls(d, sig)
-            times += [t for t, _ in polls]
-            intervals += [(e["t0"],
-                           e["t1"] if e["t1"] is not None else e["t_last"])
-                          for e in extract_episodes(polls)]
-        times.sort()
-        if len(times) < 2:
-            continue
-        span = sum(min(t2 - t1, EPISODE_CENSOR_GAP_S)
-                   for t1, t2 in zip(times, times[1:]))
-        within.setdefault("both", {})[(pid, cond)] = 100.0 * (
-            1 - _interval_union(intervals) / span)
+            if (pid, cond, sig) in gated:
+                continue
+            v = quiet_within_pct(d, (sig,), excl)
+            if v is not None:
+                within.setdefault(sig, {})[(pid, cond)] = v
+        if (pid, cond) in both_ok:
+            v = quiet_within_pct(d, ("eng", "emo"), excl)
+            if v is not None:
+                within.setdefault("both", {})[(pid, cond)] = v
 
     for sig, label in (("eng", "Time within eng.\\ threshold (\\%)"),
                        ("emo", "Time within emo.\\ threshold (\\%)"),
@@ -845,7 +831,10 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
             rows["All interv."][(pid, cond, h)] = (
                 rows["Engagement interv."][(pid, cond, h)]
                 + rows["Emotion interv."][(pid, cond, h)])
-        # mean raw signal value per half
+        # signal metrics per half over the speech-excluded timeline
+        # (decided 05.09): quiet means restricted to the half window,
+        # %-within via quiet_within_pct with the half as an extra clip.
+        excl = speech_exclusions(d)
         for sig, csv, col, label in (
                 ("eng", "engagement.csv", "score", "Mean engagement score"),
                 ("emo", "emotion.csv", "negative_share",
@@ -856,41 +845,28 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
                    for r in _log_rows(d, csv)
                    if r.get(col) and r.get("t_session_s")
                    and float(r["t_session_s"]) >= 0]
+            pts = [(t, v) for t, v in pts
+                   if not any(s0 <= t <= s1 for s0, s1 in excl)]
             for h, lo, hi in halves:
                 xs = [v for t, v in pts if lo <= t < hi]
                 if xs:
                     rows[label][(pid, cond, h)] = sum(xs) / len(xs)
-        # %-time within thresholds per half: coverage segments (inter-poll
-        # gaps clamped at the censor gap) and episode intervals, clipped
         eng_ok = (pid, cond, "eng") not in gated
         emo_ok = (pid, cond, "emo") not in gated
-        segs, eps = {}, {}
-        for sig, ok in (("eng", eng_ok), ("emo", emo_ok)):
+        for sig, ok, label in (
+                ("eng", eng_ok, "Time within eng.\\ threshold (\\%)"),
+                ("emo", emo_ok, "Time within emo.\\ threshold (\\%)")):
             if not ok:
                 continue
-            polls = signal_polls(d, sig)
-            segs[sig] = [(t1, min(t2, t1 + EPISODE_CENSOR_GAP_S))
-                         for (t1, _), (t2, _) in zip(polls, polls[1:])]
-            eps[sig] = [(e["t0"],
-                         e["t1"] if e["t1"] is not None else e["t_last"])
-                        for e in extract_episodes(polls)]
-        for sig, label in (("eng", "Time within eng.\\ threshold (\\%)"),
-                           ("emo", "Time within emo.\\ threshold (\\%)")):
-            if sig not in segs:
-                continue
             for h, lo, hi in halves:
-                span = _clip_len(segs[sig], lo, hi)
-                if span > 0:
-                    rows[label][(pid, cond, h)] = 100.0 * (
-                        1 - _clip_len(eps[sig], lo, hi) / span)
+                v = quiet_within_pct(d, (sig,), excl, lo=lo, hi=hi)
+                if v is not None:
+                    rows[label][(pid, cond, h)] = v
         if eng_ok and emo_ok:
-            allsegs = segs["eng"] + segs["emo"]
-            alleps = eps["eng"] + eps["emo"]
             for h, lo, hi in halves:
-                span = _clip_len(allsegs, lo, hi)
-                if span > 0:
-                    rows["Time within both thresholds (\\%)"][(pid, cond, h)] = (
-                        100.0 * (1 - _clip_len(alleps, lo, hi) / span))
+                v = quiet_within_pct(d, ("eng", "emo"), excl, lo=lo, hi=hi)
+                if v is not None:
+                    rows["Time within both thresholds (\\%)"][(pid, cond, h)] = v
     decs = {"Mean engagement score": 2, "Mean neg.-affect share": 2,
             "Engagement interv.": 0, "Emotion interv.": 0, "All interv.": 0}
     return [(label, vals, decs.get(label, 1))

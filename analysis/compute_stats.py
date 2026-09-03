@@ -37,7 +37,7 @@ from generate_appendix import (
     NARS_REVERSE_ITEMS, QUIET_BUFFER_S, SIGNAL_COVERAGE_MIN, TLX_DIMS,
     assign_groups, clean, load_qualtrics, newest_file, to_rank,
     episode_records, frustration_mechanism, gated_signals, landmark_pairs,
-    quiet_engagement_medians,
+    quiet_engagement_medians, quiet_within_pct,
     _read_rows as _log_rows,
     session_dirs as _session_dirs,
     session_metrics as _session_metrics,
@@ -253,6 +253,23 @@ def main() -> None:
 
     # ------------------------------------- 8. session-log descriptives
     print("\n[8] Session-log descriptives per condition and group")
+    gaps_all, sess_med = [], []
+    for (pid_, cond_), d_ in _session_dirs().items():
+        ts_ = [t for t, _ in _polls(d_, "eng")]
+        if len(ts_) > 5:
+            g_ = np.diff(ts_)
+            g_ = g_[g_ < 30]
+            gaps_all.extend(g_)
+            sess_med.append(np.median(g_))
+    gaps_all = np.asarray(gaps_all)
+    print(f"    Engagement scoring cadence: inter-score gap mean "
+          f"{gaps_all.mean():.2f}s (SD {gaps_all.std(ddof=1):.2f}), "
+          f"median {np.median(gaps_all):.2f}s; per-session medians "
+          f"{min(sess_med):.1f}-{max(sess_med):.1f}s (n={len(gaps_all)} "
+          f"gaps; each score spans the previous 10 frames = one gap).")
+    print("    Signal metrics below use the speech-excluded timeline:")
+    print("    samples during user/robot speech plus 10s after each")
+    print("    segment are excluded (exact interval subtraction).")
     print("    Counterfactual caveat: control counts are an upper bound —")
     print("    no conversation exists there to reset the interaction")
     print("    cooldown (only counterfactual fires do), so gating is")
@@ -388,13 +405,16 @@ def main() -> None:
     for sig, signame in (("eng", "engagement"), ("emo", "emotion")):
         sub = ep[ep.sig == sig]
         med = sub.dropna(subset=["dur"]).groupby(["pid", "cond"]).dur.median().unstack()
-        below = sub.assign(bt=sub.dur.fillna(sub.low_bound)).groupby(
-            ["pid", "cond"]).bt.sum().unstack().reindex(
-            sorted({p for p, c, s in spans if s == sig}, key=int)).fillna(0.0)
-        pct = pd.DataFrame({
-            cond: pd.Series({p: 100 * below.loc[p, cond] / spans[(p, cond, sig)]
-                             for p in below.index if (p, cond, sig) in spans})
-            for cond in ("Robot", "Control")})
+        # speech-excluded timeline (05.09), matching the tables
+        pct_vals = {}
+        for (p, cond, s2) in spans:
+            if s2 != sig:
+                continue
+            v = quiet_within_pct(sdirs[(p, cond)], (sig,))
+            if v is not None:
+                pct_vals[(p, cond)] = 100.0 - v
+        pct = pd.Series(pct_vals).unstack().reindex(
+            columns=["Robot", "Control"])
         for gname in ("Overall", "ADHD", "Control"):
             if gname == "Overall":
                 gmed, gpct = med, pct

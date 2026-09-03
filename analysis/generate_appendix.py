@@ -1506,6 +1506,99 @@ def session_metrics(dirpath: str, cond: str) -> dict:
     }
 
 
+# Speech exclusion for the signal-level metrics (decided 05.09): samples
+# during user/robot speech, plus this many seconds after each segment, are
+# excluded from the mean-score and %-within-threshold metrics — a score
+# integrates the preceding ~10 frames (measured 7.6s median, 10.9s in the
+# slowest session), so post-speech samples still contain conversation
+# footage. NB the slowest session's window slightly exceeds 10s; 15 would
+# cover it fully (results are insensitive across 0-15, checked 05.09).
+# The coverage gate stays on RAW polls (sensor health, not quietness);
+# event-timing analyses (episodes' recovery, landmark, re-engagement)
+# keep wall-clock semantics.
+SPEECH_EXCLUSION_BUFFER_S = 10.0
+
+
+def speech_exclusions(dirpath: str) -> list[tuple[float, float]]:
+    """Merged [(start, end + buffer)] intervals of any speech, either
+    actor. Empty for sessions without speech (all no-robot sessions)."""
+    iv = sorted((float(r["t_start_s"]),
+                 float(r["t_end_s"]) + SPEECH_EXCLUSION_BUFFER_S)
+                for r in _read_rows(dirpath, "speech.csv")
+                if r["t_start_s"])
+    out: list[tuple[float, float]] = []
+    for s0, s1 in iv:
+        if out and s0 <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], s1))
+        else:
+            out.append((s0, s1))
+    return out
+
+
+def _excl_overlap(excl: list, lo: float, hi: float) -> float:
+    return sum(max(0.0, min(e, hi) - max(s, lo)) for s, e in excl)
+
+
+def _in_excl(excl: list, t: float) -> bool:
+    return any(s0 <= t <= s1 for s0, s1 in excl)
+
+
+def quiet_signal_mean(dirpath: str, sig: str,
+                      excl: list | None = None) -> float | None:
+    """Session mean of the raw signal value over speech-excluded samples."""
+    if excl is None:
+        excl = speech_exclusions(dirpath)
+    csv, col = (("engagement.csv", "score") if sig == "eng"
+                else ("emotion.csv", "negative_share"))
+    vals = [float(r[col]) for r in _read_rows(dirpath, csv)
+            if r.get(col) and r.get("t_session_s")
+            and float(r["t_session_s"]) >= 0
+            and not _in_excl(excl, float(r["t_session_s"]))]
+    return sum(vals) / len(vals) if vals else None
+
+
+def quiet_within_pct(dirpath: str, sigs: tuple, excl: list | None = None,
+                     lo: float | None = None,
+                     hi: float | None = None) -> float | None:
+    """% of speech-excluded observed time within threshold(s), exact
+    subtraction: episodes are extracted on the speech-excluded poll
+    timeline, and both the observed-time denominator (inter-poll gaps
+    clamped at the censor gap) and the below-threshold numerator subtract
+    their overlap with the exclusion intervals. Multiple sigs = 'within
+    both' (union of both signals' episodes over the merged timeline).
+    lo/hi additionally clip to a window (for the session-half splits)."""
+    if excl is None:
+        excl = speech_exclusions(dirpath)
+    if lo is not None:
+        excl = excl + [(-1e9, lo), (hi, 1e9)]
+    polls_by_sig = {}
+    for sig in sigs:
+        polls_by_sig[sig] = [(t, a) for t, a in signal_polls(dirpath, sig)
+                             if not _in_excl(excl, t)]
+    times = sorted(set(t for ps in polls_by_sig.values() for t, _ in ps))
+    if len(times) < 2:
+        return None
+    span = sum((min(t2, t1 + EPISODE_CENSOR_GAP_S) - t1)
+               - _excl_overlap(excl, t1, min(t2, t1 + EPISODE_CENSOR_GAP_S))
+               for t1, t2 in zip(times, times[1:]))
+    if span <= 0:
+        return None
+    ints = []
+    for ps in polls_by_sig.values():
+        for e in extract_episodes(ps):
+            ints.append((e["t0"],
+                         e["t1"] if e["t1"] is not None else e["t_last"]))
+    merged: list[tuple[float, float]] = []
+    for s0, s1 in sorted(ints):
+        if merged and s0 <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], s1))
+        else:
+            merged.append((s0, s1))
+    below = sum((s1 - s0) - _excl_overlap(excl, s0, s1)
+                for s0, s1 in merged)
+    return 100.0 * (1 - below / span)
+
+
 def signal_polls(dirpath: str, which: str) -> list[tuple[float, bool]]:
     """(t_session_s, signal_active) for value-bearing polls, in time order.
     'eng': rolling average < threshold; 'emo': windowed negative share >
@@ -2533,14 +2626,17 @@ Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), med
         sub = ep[ep.sig == sig]
         med = (sub.dropna(subset=["dur"])
                .groupby(["pid", "cond"]).dur.median().unstack())
-        below = (sub.assign(bt=sub.dur.fillna(sub.low_bound))
-                 .groupby(["pid", "cond"]).bt.sum().unstack()
-                 .reindex(sorted({p for p, c, s in spans if s == sig},
-                                 key=int)).fillna(0.0))
-        pct = pd.DataFrame({
-            cond: pd.Series({p: 100 * below.loc[p, cond] / spans[(p, cond, sig)]
-                             for p in below.index if (p, cond, sig) in spans})
-            for cond in ("Robot", "Control")})
+        # %-past-threshold on the speech-excluded timeline (05.09),
+        # consistent with the results tables: 100 - quiet_within_pct.
+        pct_vals = {}
+        for (p, cond, s2) in spans:
+            if s2 != sig:
+                continue
+            v = quiet_within_pct(sdirs[(p, cond)], (sig,))
+            if v is not None:
+                pct_vals[(p, cond)] = 100.0 - v
+        pct = pd.Series(pct_vals).unstack().reindex(
+            columns=["Robot", "Control"])
         for label, df in (("Median recovery (s), paired", med),
                           ("\\% of observed time past threshold", pct)):
             if not {"Robot", "Control"} <= set(df.columns):
@@ -2560,9 +2656,11 @@ Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), med
                "\\noindent{\\small Paired within-subject comparisons "
                "(Wilcoxon signed-rank). Median recovery uses participants "
                "with at least one uncensored episode in both sessions; "
-               "time past threshold uses all participants (censored "
-               "episodes contribute their observed lower bound; sensing "
-               "gaps above 30\\,s do not count as observed time)."
+               "time past threshold uses all participants over the "
+               "speech-excluded timeline (samples during user/robot "
+               "speech and the 10\\,s after each segment are excluded, "
+               "with exact interval subtraction; sensing gaps above "
+               "30\\,s do not count as observed time)."
                "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
 \\begin{tabular}{llrrrrr}
