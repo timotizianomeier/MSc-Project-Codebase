@@ -1227,20 +1227,28 @@ _SUGGESTIONS = [
 ]
 
 
-def _render_suggestions_table(*, stmt_w, size) -> str:
+def _render_suggestions_table(*, cat_w, stmt_w, size) -> str:
+    """Category | Suggestion | Participants (layout decided 04.09):
+    the category prints on its first row only; categories are ordered by
+    total mention count (desc), suggestions within a category by their
+    own count (desc), ties keeping the coded order."""
+    cats = sorted(_SUGGESTIONS,
+                  key=lambda c: -sum(n for _, n in c[1]))
     lines = []
-    for category, items in _SUGGESTIONS:
-        lines.append(f"\\multicolumn{{2}}{{@{{}}l}}{{\\textbf{{{category}}}}}"
-                     " \\\\*")
-        for stmt, n in items:
+    for category, items in cats:
+        items = sorted(items, key=lambda it: -it[1])
+        for i, (stmt, n) in enumerate(items):
             pct = round(100 * n / _SUGGESTIONS_N_ADHD)
-            lines.append(f"\\quad {stmt} & {n} ({pct}\\%) \\\\")
+            cat_cell = f"\\textbf{{{category}}}" if i == 0 else ""
+            keep = "*" if i < len(items) - 1 else ""
+            lines.append(f"{cat_cell} & {stmt} & {n} ({pct}\\%) "
+                         f"\\\\{keep}")
         lines.append("\\addlinespace")
     body = "\n".join(lines[:-1])  # drop trailing spacer
     return f"""\\begingroup\\centering{size}
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}p{{{cat_w}}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
 \\toprule
-\\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
+\\textbf{{Category}} & \\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1250,13 +1258,15 @@ def _render_suggestions_table(*, stmt_w, size) -> str:
 def table_suggestions(post, qtext, groups):
     """Thesis version of the ADHD improvement-suggestions table."""
     return "improvement_suggestions", _render_suggestions_table(
-        stmt_w="0.75\\textwidth", size="\\small")
+        cat_w="0.17\\textwidth", stmt_w="0.58\\textwidth",
+        size="\\small")
 
 
 def table_suggestions_col(post, qtext, groups):
     """HRI column-width version."""
     return "improvement_suggestions_col", _render_suggestions_table(
-        stmt_w="0.68\\columnwidth", size="\\footnotesize")
+        cat_w="0.22\\columnwidth", stmt_w="0.5\\columnwidth",
+        size="\\footnotesize")
 
 
 def chart_feature_means_adhd(post, qtext, groups):
