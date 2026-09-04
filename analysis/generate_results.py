@@ -1468,55 +1468,88 @@ def _post_cue_recovery(groups):
 
 
 def table_reengagement(post, qtext, groups):
-    """Post-intervention re-engagement (simplified design 04.09): robot =
-    time from end of the post-intervention dialogue to back-at-threshold;
-    control = observed episode duration. Pooled descriptives plus a
-    paired per-participant-median comparison."""
+    """Post-intervention re-engagement (simplified design 04.09, layout
+    05.09): robot = time from end of the post-intervention dialogue to
+    back-at-threshold; control = observed episode duration. One value
+    per participant (their median), full stat spread over the paired
+    sample; raw event counts and the means-based sensitivity check live
+    in the note (the pooled columns invited a severity-selection
+    misreading: interventions only fire in sustained dips, while the
+    No-Robot pool contains every mild self-resolving episode)."""
     rob, ctl, cens = _post_cue_recovery(groups)
     signame = {"eng": "Engagement", "emo": "Negative emotion"}
-    rows = []
+    scopes = [("All", None), ("ADHD", GROUP_ADHD), ("No-ADHD", GROUP_CONTROL)]
+    blocks, counts, means_note = [], {}, {}
     for sig in ("eng", "emo"):
         r = rob[rob.sig == sig].set_index("pid").dur
         c = ctl[ctl.sig == sig].set_index("pid").dur
-        mean_r, mean_c = r.groupby(level=0).mean(), c.groupby(level=0).mean()
-        med_r, med_c = (r.groupby(level=0).median(),
-                        c.groupby(level=0).median())
-        # Wilcoxon on per-participant medians (typical case), paired t on
-        # per-participant means (tail-inclusive) — see the table note.
-        _, p, n = _wilcoxon_cells(med_r, med_c)
-        pt = _pairedt_p(mean_r, mean_c)
-        cell = (lambda st: f"{st.mean():.0f} ({st.std(ddof=1):.0f}) "
-                f"[{len(st)}]" if len(st) else "--")
-        rows.append(
-            f"{signame[sig]} & {cell(r)} & {cell(c)} & "
-            f"{mean_r.mean():.0f} & {mean_c.mean():.0f} & "
-            f"{med_r.median():.0f} & {med_c.median():.0f} & {n} & "
-            f"{_pcell(p)} & {pt} \\\\")
-    body = "\n".join(rows)
+        counts[sig] = (len(r), len(c))
+        med_all = pd.concat([r.groupby(level=0).median(),
+                             c.groupby(level=0).median()],
+                            axis=1, keys=["Robot", "Control"]).dropna()
+        mean = pd.concat([r.groupby(level=0).mean(),
+                          c.groupby(level=0).mean()],
+                         axis=1, keys=["Robot", "Control"]).dropna()
+        means_note[sig] = (mean["Robot"].mean(), mean["Control"].mean(),
+                           _pairedt_p(mean["Robot"], mean["Control"]))
+        rows = []
+        for name, g in scopes:
+            med = (med_all if g is None else
+                   med_all[med_all.index.map(groups.get) == g])
+            mr, mc = med["Robot"], med["Control"]
+            _, p, n = _wilcoxon_cells(mr, mc)
+            stats_ = [(mr.min(), mc.min()), (mr.mean(), mc.mean()),
+                      (mr.median(), mc.median()), (mr.max(), mc.max()),
+                      (mr.std(ddof=1), mc.std(ddof=1))]
+            rows.append(
+                [name]
+                + [_scell("--" if pd.isna(x) else f"{x:.0f}")
+                   for a, b in stats_ for x in (a, b)]
+                + [_scell(str(n)), _pcell(p), _pairedt_p(mr, mc)])
+        blocks.append((signame[sig], rows))
+    specs = _sspecs([r[1:] for _, rows in blocks for r in rows])
+    pair_spec = ("r@{\\extracolsep{0pt}\\,$|$\\,}"
+                 "l@{\\extracolsep{\\fill}\\hspace{5pt}}") * 5
+    lines = []
+    for bi, (label, rows) in enumerate(blocks):
+        if bi:
+            lines.append("\\arrayrulecolor{black!25}\\cmidrule{1-15}"
+                         "\\arrayrulecolor{black}")
+        for i, row in enumerate(rows):
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{*}}{{{label}}}"
+                   if i == 0 else "")
+            lines.append(f"{lab} & " + " & ".join(row) + " \\\\")
+    body = "\n".join(lines)
+    mn = {s: f"{v[0]:.0f} vs.\\ {v[1]:.0f}\\,s, $p_t$ = "
+          + v[2].strip("{}") for s, v in means_note.items()}
     tex = f"""\\begingroup\\centering\\footnotesize
-\\setlength{{\\tabcolsep}}{{1.5pt}}%
-\\begin{{tabular}}{{lccccccccc}}
+\\setlength{{\\tabcolsep}}{{3pt}}%
+\\setlength{{\\aboverulesep}}{{0.15ex}}\\setlength{{\\belowrulesep}}{{0.3ex}}%
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-3]}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
- & \\multicolumn{{2}}{{c}}{{Time below threshold (s), pooled}} &
-   \\multicolumn{{7}}{{c}}{{Per-participant summaries (paired)}} \\\\
-\\cmidrule(lr){{2-3}} \\cmidrule(lr){{4-10}}
- &  &  & \\multicolumn{{2}}{{c}}{{Mean}} &
-   \\multicolumn{{2}}{{c}}{{Median}} & & & \\\\
-Signal & Robot: after dialogue & No-Robot: full episode &
-  Robot & No-Rob. & Robot & No-Rob. & $n$ & {{$p_W$}} & {{$p_t$}} \\\\
- & \\multicolumn{{2}}{{c}}{{mean (SD) [count]}} & & & & & & & \\\\
+ & & \\multicolumn{{10}}{{c}}{{Robot\\,$|$\\,No-Robot, time below
+   threshold (s)}} &
+   \\multicolumn{{3}}{{c}}{{Within-subject}} \\\\
+\\cmidrule(lr){{3-12}} \\cmidrule(lr){{13-15}}
+Signal & Scope & \\multicolumn{{2}}{{c}}{{Min}} &
+  \\multicolumn{{2}}{{c}}{{Mean}} & \\multicolumn{{2}}{{c}}{{Median}} &
+  \\multicolumn{{2}}{{c}}{{Max}} &
+  \\multicolumn{{2}}{{c}}{{SD}} & {{$n$}} & {{$p_W$}} & {{$p_t$}} \\\\
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\vspace{{0.4em}}
+\\end{{tabular*}}\\par\\vspace{{0.4em}}
 \\noindent{{\\small Robot sessions: clock starts when the dialogue
 following an intervention ends (speech chained across gaps below
 {_DIALOGUE_CHAIN_GAP_S:.0f}\\,s); No-Robot sessions: clock starts at
 episode onset. The two clocks therefore start at different points —
-descriptive comparison only. {cens} never-recovered cases censored.
-Durations are right-skewed: $p_W$ is the Wilcoxon over per-participant
-medians (typical episode), $p_t$ the paired $t$ over per-participant
-means (tail-inclusive) — they can disagree, and both are shown.}}\\par
+descriptive comparison only. Each participant contributes their median
+recovery time; both tests are paired over those medians. Underlying
+events: engagement {counts['eng'][0]}/{counts['eng'][1]}, emotion
+{counts['emo'][0]}/{counts['emo'][1]} (Robot/No-Robot);
+{cens} never-recovered cases censored. Durations are right-skewed —
+per-participant means instead of medians (tail-inclusive):
+engagement {mn['eng']}, emotion {mn['emo']}.}}\\par
 \\endgroup"""
     return "session_reengagement", tex
 
