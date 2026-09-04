@@ -1203,6 +1203,58 @@ def table_metrics_halves_combined(post, qtext, groups):
         groups, size="\\footnotesize", colsep="2pt")
 
 
+def table_glmm_comparison(post, qtext, groups):
+    """GLMM robustness check (Nicole 04.09): per-metric Gaussian LMM
+    (value ~ robot * adhd, random intercept per participant, effects
+    coding) next to the pipeline's nonparametric/t twins, plus a Poisson
+    GEE interaction p for the count metrics. Lazy import so the rest of
+    the pipeline keeps running without statsmodels."""
+    from glmm_comparison import glmm_rows
+    rows = glmm_rows(groups)
+    keys = ("p_int_lmm", "p_int_gee", "p_int_u", "p_int_t",
+            "p_cond_lmm", "p_cond_w", "p_cond_t",
+            "p_grp_lmm", "p_grp_u", "p_grp_t")
+
+    def cell(p):
+        if p != p:
+            return "{--}"
+        return "{$<.001$}" if p < 0.001 else f"{p:.3f}"
+
+    body = "\n".join(
+        f"{r['label']} & {{{r['n']}}} & "
+        + " & ".join(cell(r[k]) for k in keys) + " \\\\"
+        for r in rows)
+    return "glmm_comparison", f"""\\begingroup\\centering\\footnotesize
+\\setlength{{\\tabcolsep}}{{2pt}}%
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{"S[table-format=1.3]" * 10}@{{}}}}
+\\toprule
+ & & \\multicolumn{{4}}{{c}}{{Interaction (cond.\\ $\\times$ group)}} &
+   \\multicolumn{{3}}{{c}}{{Condition main effect}} &
+   \\multicolumn{{3}}{{c}}{{Group main effect}} \\\\
+\\cmidrule(lr){{3-6}} \\cmidrule(lr){{7-9}} \\cmidrule(lr){{10-12}}
+Measure & {{$n$}} & {{LMM}} & {{GEE}} & {{$p_U(\\Delta)$}} &
+  {{$p_t(\\Delta)$}} & {{LMM}} & {{$p_W$}} & {{$p_t$}} &
+  {{LMM}} & {{$p_U$}} & {{$p_t$}} \\\\
+\\midrule
+{body}
+\\bottomrule
+\\end{{tabular*}}\\par\\vspace{{0.4em}}
+\\noindent{{\\small Gaussian linear mixed model per metric:
+value $\\sim$ condition $\\times$ group with a random intercept per
+participant; factors effects-coded ($\\pm 0.5$), so each main-effect
+coefficient is that factor's effect averaged over the other; Wald
+$p$-values (REML). GEE = Poisson generalized estimating equations with
+robust standard errors (intervention counts only). $n$ =
+sessions/participants entering the model (participants with one usable
+session included; the paired and delta tests use their usual pairings).
+$p_U(\\Delta)$/$p_t(\\Delta)$: Mann-Whitney~$U$ / Welch $t$ on
+per-participant Robot$-$No-Robot deltas between groups; $p_W$/$p_t$:
+paired Wilcoxon / paired $t$ across conditions; group $p_U$/$p_t$:
+Mann-Whitney~$U$ / Welch $t$ on condition-pooled per-participant means.
+Signal metrics carry the speech exclusion.}}\\par
+\\endgroup"""
+
+
 def table_metrics_halves_pooled(post, qtext, groups):
     """Thesis appendix: first vs second half pooled over conditions AND
     groups (Nicole/outline 04.09) — per participant and half, the mean of
@@ -1590,6 +1642,7 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_within_combined,
                   table_metrics_between_combined,
                   table_metrics_halves_combined,
+                  table_glmm_comparison,
                   table_feature_stats, table_feature_stats_col,
                   table_suggestions, table_suggestions_col]
 
