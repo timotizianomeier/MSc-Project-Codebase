@@ -53,8 +53,10 @@ are synced to Box `study-data/analysis-csv/` by the end-of-day rsync.
 
 ### Environment
 
-`analysis/.venv` (pandas + numpy), separate from the study app's frozen venv:
+`analysis/.venv` (pandas + numpy + scipy; statsmodels only for
+`glmm_comparison.py`, the mixed-model robustness check of the session
+metrics), separate from the study app's frozen venv:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pandas numpy
+python3 -m venv .venv && .venv/bin/pip install pandas numpy scipy statsmodels
 ```

@@ -1632,27 +1632,10 @@ def main() -> None:
             sync_to_repo(target, names)
 
 
-# Per-fragment routing (decided 02.09): the 2x2 breakdown tables go to
-# the thesis appendix only; the consolidated DiD summary and everything
-# else ship to both repos. results_preview also stays thesis-only (it
-# \inputs fragments the HRI repo does not receive).
-THESIS_ONLY_FRAGMENTS = {
-    "session_metrics_adhd", "session_metrics_adhd_col",
-    "session_metrics_ctrl", "session_metrics_ctrl_col",
-    "session_metrics_robot_by_group", "session_metrics_robot_by_group_col",
-    "session_metrics_control_by_group",
-    "session_metrics_control_by_group_col",
-    "session_metrics_delta_by_group", "session_metrics_delta_by_group_col",
-    "session_metrics_halves_adhd", "session_metrics_halves_noadhd",
-    "session_metrics_halves_all",
-    "session_metrics_all", "session_metrics_all_col",
-    "session_metrics_pooled_by_group", "session_metrics_pooled_by_group_col",
-    "session_reengagement",
-    "session_metrics_halves_pooled",
-    "session_metrics_within_combined", "session_metrics_between_combined",
-    "session_metrics_halves_combined",
-    "results_preview",
-}
+# Routing (04.09): every fragment ships to both repos — the HRI repo kept
+# falling behind the thesis repo, and an unused fragment there is harmless
+# (nothing \inputs it). Fragments needing multirow/siunitx/colortbl/rotating
+# only render once acmart's preamble loads those packages.
 
 
 def sync_to_repo(charts_dir: str, names: list[str]) -> None:
@@ -1665,8 +1648,6 @@ def sync_to_repo(charts_dir: str, names: list[str]) -> None:
         return
     os.makedirs(charts_dir, exist_ok=True)
     ship = names + ["results_preview"]
-    if "HRI" in os.path.basename(repo):
-        ship = [n for n in ship if n not in THESIS_ONLY_FRAGMENTS]
     for name in ship:
         shutil.copy2(os.path.join(OUTPUT_DIR, f"{name}.tex"),
                      os.path.join(charts_dir, f"{name}.tex"))
