@@ -332,7 +332,8 @@ def _sheads(heads: list[str]) -> str:
     return " & ".join("{" + h + "}" for h in heads)
 
 
-def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
+def _render_session_metrics_table(groups, *, quartiles, size, colsep,
+                                  width="\\textwidth") -> str:
     """Robot-session metrics table for the results sections: one row per
     metric, each stat an 'ADHD | Control' pair, closed by the Mann-Whitney
     p value (U dropped for space, decided 30.08). Each pair is a
@@ -379,7 +380,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep) -> str:
                      for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,No-ADHD}} & \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}}
@@ -397,9 +398,11 @@ def table_session_metrics(post, qtext, groups):
 
 
 def table_session_metrics_col(post, qtext, groups):
-    """HRI version: no Q1/Q3, \\scriptsize — sized for half a page."""
+    """HRI version: no Q1/Q3, \\scriptsize — sized for one acmart
+    column (\\columnwidth; \\textwidth there spans BOTH columns)."""
     return "session_metrics_robot_col", _render_session_metrics_table(
-        groups, quartiles=False, size="\\scriptsize", colsep="3pt")
+        groups, quartiles=False, size="\\scriptsize", colsep="3pt",
+        width="\\columnwidth")
 
 
 def _interval_union(intervals: list[tuple[float, float]]) -> float:
@@ -508,7 +511,8 @@ def _cross_condition_rows(groups, group=None) -> list[tuple[str, pd.DataFrame, i
     return rows
 
 
-def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
+def _render_cross_table(groups, group, *, quartiles, size, colsep,
+                        width="\\textwidth") -> str:
     """One group's robot-vs-control table: interventions (control =
     counterfactual upper bound), episode durations, and %-time within
     thresholds, each stat a 'Robot | Control' pair, closed by the paired
@@ -549,7 +553,7 @@ def _render_cross_table(groups, group, *, quartiles, size, colsep) -> str:
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{Robot\\,$|$\\,No-Robot}} &
    \\multicolumn{{2}}{{c}}{{Within-subject}} \\\\
@@ -576,7 +580,7 @@ def table_session_metrics_adhd_col(post, qtext, groups):
 
 
 def _render_group_stats_table(rows, groups, *, header, quartiles, size,
-                              colsep) -> str:
+                              colsep, width="\\textwidth") -> str:
     """ADHD-vs-control table over per-participant values: each stat an
     'ADHD | Control' pair, closed by Mann-Whitney n (pair) and p. `rows`
     is a list of (label, Series indexed by pid, dec)."""
@@ -612,7 +616,7 @@ def _render_group_stats_table(rows, groups, *, header, quartiles, size,
                      for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}c{specs[-1]}@{{}}}}
 \\toprule
  & \\multicolumn{{{2 * n_stats}}}{{c}}{{{header}}} &
    \\multicolumn{{2}}{{c}}{{Between groups}} \\\\
@@ -871,7 +875,8 @@ def _half_split_rows(groups, members) -> list[tuple[str, dict, int]]:
             for label, vals in rows.items()]
 
 
-def _render_halves_table(groups, member_group, *, size, colsep) -> str:
+def _render_halves_table(groups, member_group, *, size, colsep,
+                         width="\\textwidth") -> str:
     """First-half vs second-half table for one participant set: per half
     a Robot / No-Robot mean pair with that half's paired Wilcoxon p, then
     a Wilcoxon block testing 1st vs 2nd within each condition and on the
@@ -906,7 +911,7 @@ def _render_halves_table(groups, member_group, *, size, colsep) -> str:
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{"".join(specs)}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{"".join(specs)}@{{}}}}
 \\toprule
  & \\multicolumn{{3}}{{c}}{{First half}} &
    \\multicolumn{{3}}{{c}}{{Second half}} &
@@ -1241,7 +1246,8 @@ def _glmm_rows_cached(groups):
     return _glmm_rows_cache
 
 
-def _render_glmm_table(groups, *, size, colsep) -> str:
+def _render_glmm_table(groups, *, size, colsep,
+                       width="\\textwidth") -> str:
     """GLMM robustness check (Nicole 04.09): per-metric Gaussian LMM
     (value ~ robot * adhd, random intercept per participant, effects
     coding) next to the pipeline's nonparametric/t twins, plus a Poisson
@@ -1263,7 +1269,7 @@ def _render_glmm_table(groups, *, size, colsep) -> str:
         for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{"S[table-format=1.3]" * 10}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{"S[table-format=1.3]" * 10}@{{}}}}
 \\toprule
  & & \\multicolumn{{4}}{{c}}{{Interaction (cond.\\ $\\times$ group)}} &
    \\multicolumn{{3}}{{c}}{{Condition main effect}} &
@@ -1528,7 +1534,8 @@ def _post_cue_recovery(groups):
     return pd.DataFrame(rob), pd.DataFrame(ctl), cens
 
 
-def _render_reengagement(groups, *, size, colsep) -> str:
+def _render_reengagement(groups, *, size, colsep,
+                         width="\\textwidth") -> str:
     """Post-intervention re-engagement (simplified design 04.09, layout
     05.09): robot = time from end of the post-intervention dialogue to
     back-at-threshold; control = observed episode duration. One value
@@ -1589,7 +1596,7 @@ def _render_reengagement(groups, *, size, colsep) -> str:
     tex = f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\setlength{{\\aboverulesep}}{{0.15ex}}\\setlength{{\\belowrulesep}}{{0.3ex}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}ll@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-2]}{specs[-1]}@{{}}}}
 \\toprule
  & & \\multicolumn{{10}}{{c}}{{Robot\\,$|$\\,No-Robot, time below
    threshold (s)}} &
@@ -1627,7 +1634,8 @@ def table_reengagement(post, qtext, groups):
 def table_reengagement_col(post, qtext, groups):
     """HRI-sized variant of the re-engagement table."""
     return "session_reengagement_col", _render_reengagement(
-        groups, size="\\scriptsize", colsep="2pt")
+        groups, size="\\scriptsize", colsep="2pt",
+        width="\\columnwidth")
 
 
 # Improvement suggestions of ADHD participants, O'Connell-style. This is
@@ -1664,7 +1672,8 @@ _SUGGESTIONS = [
 ]
 
 
-def _render_suggestions_table(*, cat_w, stmt_w, size) -> str:
+def _render_suggestions_table(*, cat_w, stmt_w, size,
+                              width="\\textwidth") -> str:
     """Category | Suggestion | Participants (layout decided 04.09):
     the category prints on its first row only; categories are ordered by
     total mention count (desc), suggestions within a category by their
@@ -1684,7 +1693,7 @@ def _render_suggestions_table(*, cat_w, stmt_w, size) -> str:
                      "\\arrayrulecolor{black}")
     body = "\n".join(lines[:-1])  # drop trailing rule
     return f"""\\begingroup\\centering{size}
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}>{{\\raggedright\\arraybackslash}}p{{{cat_w}}}>{{\\raggedright\\arraybackslash}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}>{{\\raggedright\\arraybackslash}}p{{{cat_w}}}>{{\\raggedright\\arraybackslash}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
 \\toprule
 \\textbf{{Category}} & \\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
 \\midrule
@@ -1704,7 +1713,7 @@ def table_suggestions_col(post, qtext, groups):
     """HRI column-width version."""
     return "improvement_suggestions_col", _render_suggestions_table(
         cat_w="0.26\\columnwidth", stmt_w="0.48\\columnwidth",
-        size="\\footnotesize")
+        size="\\footnotesize", width="\\columnwidth")
 
 
 def chart_feature_means_adhd(post, qtext, groups):
