@@ -1390,9 +1390,18 @@ def _sessions(cond: str, groups: dict[str, str]) -> list[tuple[int, str]]:
     return out
 
 
-def _interaction_chart(groups: dict[str, str]) -> str:
+def _interaction_chart(groups: dict[str, str],
+                       pids: set[int] | None = None,
+                       group_headers: bool = True) -> str:
+    """Speech-timeline rows; pids (true IDs) restricts to a subset and
+    group_headers=False drops the bold ADHD/Control gutter labels —
+    both used by generate_results for the main-report excerpt."""
     sessions = _sessions("Robot", groups)
+    if pids is not None:
+        sessions = [(p, d) for p, d in sessions if p in pids]
     rows, ymax, headers = _layout(sessions, groups)
+    if not group_headers:
+        headers = []
     body = []
     for pid, d, base in rows:
         lo, hi = base + _BAND_LO, base + _BAND_HI

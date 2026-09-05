@@ -1645,47 +1645,48 @@ def table_reengagement_col(post, qtext, groups):
 # participants are added, re-code by hand and update here.
 _SUGGESTIONS_N_ADHD = 12
 _SUGGESTIONS = [
+    # re-coded 05.09.2026: categories now mirror the system's feature
+    # taxonomy (cf. the feature-ratings blocks)
     ("Inattention detection", [
-        ("Improve detection accuracy", 3),
-        ("Add a manual override for repeated interventions", 1),
+        ("Improve accuracy, less interruptions", 5),
+        ("Prefer strictly rule-based check-ins", 2),
+        ("Add manual override for interventions", 1),
     ]),
-    ("Interaction", [
-        ("Provide chat-style transcripts of the conversation", 2),
-        ("Reduce response latency", 1),
-    ]),
-    ("Personality", [
-        ("Give less praise", 1),
-        ("Summarise less, give more actionable advice", 1),
+    ("Task-aware support", [
         ("Ask fewer questions", 2),
+        ("Display conversation transcript in webpage", 2),
+        ("Give less praise", 1),
+        ("Provide more advice, summarise less", 1),
+        ("Track time spent on specific task", 1),
     ]),
-    ("Appearance", [
-        ("Remove the physical embodiment", 1),
-        ("Add a screen for text and diagrams", 1),
-    ]),
-    ("Structural guidance", [
-        ("Offer timer-based, regular check-ins", 2),
-        ("Track time spent on specific tasks", 1),
-    ]),
-    ("Access", [
-        ("Add internet access and multi-modal input", 1),
+    ("System interaction", [
+        ("Improve latency", 1),
+        ("Add screen to display diagrams", 1),
+        ("Enable internet access", 1),
+        ("Allow multimodal input, e.g., PDF", 1),
+        ("No physical presence", 1),
     ]),
 ]
 
 
 def _render_suggestions_table(*, cat_w, stmt_w, size,
-                              width="\\textwidth") -> str:
+                              width="\\textwidth",
+                              break_cats=False) -> str:
     """Category | Suggestion | Participants (layout decided 04.09):
     the category prints on its first row only; categories are ordered by
     total mention count (desc), suggestions within a category by their
-    own count (desc), ties keeping the coded order."""
+    own count (desc), ties keeping the coded order. break_cats stacks
+    every category word on its own line (narrow HRI columns)."""
     cats = sorted(_SUGGESTIONS,
                   key=lambda c: -sum(n for _, n in c[1]))
     lines = []
     for category, items in cats:
         items = sorted(items, key=lambda it: -it[1])
+        cat_txt = (category.replace(" ", "\\newline ")
+                   if break_cats else category)
         for i, (stmt, n) in enumerate(items):
             pct = round(100 * n / _SUGGESTIONS_N_ADHD)
-            cat_cell = f"\\textbf{{{category}}}" if i == 0 else ""
+            cat_cell = f"\\textbf{{{cat_txt}}}" if i == 0 else ""
             keep = "*" if i < len(items) - 1 else ""
             lines.append(f"{cat_cell} & {stmt} & {n} ({pct}\\%) "
                          f"\\\\{keep}")
@@ -1702,6 +1703,16 @@ def _render_suggestions_table(*, cat_w, stmt_w, size,
 \\end{{tabular*}}\\par\\endgroup"""
 
 
+def chart_interaction_excerpt(post, qtext, groups):
+    """Main-report excerpt of the appendix interaction timelines:
+    display P5, P7, P9, P15 (true PIDs 15, 17, 19, 25; picked 05.09).
+    Requires the apx colour definitions (ApxSilence/ApxUserSpeech/
+    ApxRobotSpeech) from apx_preamble_snippet in the preamble."""
+    from generate_appendix import _interaction_chart
+    return "interaction_timeline_excerpt", _interaction_chart(
+        groups, pids={15, 17, 19, 25}, group_headers=False)
+
+
 def table_suggestions(post, qtext, groups):
     """Thesis version of the ADHD improvement-suggestions table."""
     return "improvement_suggestions", _render_suggestions_table(
@@ -1712,8 +1723,8 @@ def table_suggestions(post, qtext, groups):
 def table_suggestions_col(post, qtext, groups):
     """HRI column-width version."""
     return "improvement_suggestions_col", _render_suggestions_table(
-        cat_w="0.26\\columnwidth", stmt_w="0.48\\columnwidth",
-        size="\\footnotesize", width="\\columnwidth")
+        cat_w="0.16\\columnwidth", stmt_w="0.60\\columnwidth",
+        size="\\footnotesize", width="\\columnwidth", break_cats=True)
 
 
 def chart_feature_means_adhd(post, qtext, groups):
@@ -1768,6 +1779,7 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_halves_combined,
                   table_metrics_halves_combined_col,
                   table_glmm_comparison, table_glmm_comparison_col,
+                  chart_interaction_excerpt,
                   table_feature_stats, table_feature_stats_col,
                   table_suggestions, table_suggestions_col]
 
