@@ -888,9 +888,9 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
         c = ranks[~df["PID"].isin(pids_a)].dropna()
         if len(a) >= 2 and len(c) >= 2:
             u = scistats.mannwhitneyu(a, c, alternative="two-sided")
-            u_cell, p_cell = f"{u.statistic:.1f}", _fmt_p(u.pvalue)
+            p_cell = _p_val(_fmt_p(u.pvalue))
         else:
-            u_cell = p_cell = "--"
+            p_cell = "--"
         label = strip_stem(qtext.get(col, col))
         if len(label) > 78:
             label = label[:77].rstrip() + "…"
@@ -908,25 +908,22 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
             f"{_fmt_pair(a.mean(), c.mean())} & "
             f"{_fmt_pair(a.median(), c.median(), dec=1)} & "
             f"{_fmt_pair(a.std(ddof=1), c.std(ddof=1))} & "
-            f"{u_cell} & {p_cell} \\\\")
+            f"{p_cell} \\\\")
     k = len(codes)
     code_heads = " & ".join(f"{v:g}" for v in codes)
-    note = (f"Each cell shows ADHD ($n = {n_a}$) $|$ no-ADHD ($n = {n_c}$): "
-            "response counts per value, then mean, median and SD of the "
-            f"coded responses. Mann-Whitney U per item ({len(items)} "
-            "exploratory, uncorrected tests).")
-    if scale_note:
-        note += f" Coding: {scale_note}."
+    # legend reduced to the coding only (decided 05.09); the n's live in
+    # the header line and the cell semantics in the authored caption.
+    note = (f"\\noindent{{\\small Coding: {scale_note}.}}"
+            f"\\par\\vspace{{0.4em}}\n" if scale_note else "")
     body = "\n".join(rows)
     return f"""\\subsection*{{{esc(title)}}}
-\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
-{{\\scriptsize
-\\setlength{{\\tabcolsep}}{{4pt}}
+{note}{{\\small
+\\setlength{{\\tabcolsep}}{{3.5pt}}
 \\setlength{{\\LTleft}}{{0pt}}\\setlength{{\\LTright}}{{0pt}}
-\\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}rrrrr@{{}}}}
+\\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}rrrr@{{}}}}
 \\toprule
-Item & {code_heads} & Mean & Md & SD & $U$ & $p$ \\\\
- & \\multicolumn{{{k + 3}}}{{c}}{{ADHD\\,$|$\\,no-ADHD}} & & \\\\
+Item & {code_heads} & Mean & Md & SD & $p_U$ \\\\
+ & \\multicolumn{{{k + 3}}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
 \\midrule
 \\endhead
 {body}
@@ -950,9 +947,9 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
         c = v[~df["PID"].isin(pids_a)].dropna()
         if len(a) >= 2 and len(c) >= 2:
             u = scistats.mannwhitneyu(a, c, alternative="two-sided")
-            u_cell, p_cell = f"{u.statistic:.1f}", _fmt_p(u.pvalue)
+            p_cell = _p_val(_fmt_p(u.pvalue))
         else:
-            u_cell = p_cell = "--"
+            p_cell = "--"
         dim = esc(qtext.get(col, col).split(" - ")[0])
         shade = "\\rowcolor{gray!8} " if pos % 2 == 0 else ""
         cells = " & ".join(
@@ -960,18 +957,17 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
                 (a.min(), c.min()), (a.quantile(.25), c.quantile(.25)),
                 (a.median(), c.median()), (a.quantile(.75), c.quantile(.75)),
                 (a.max(), c.max())))
-        rows.append(f"{shade}{dim} & {cells} & {u_cell} & {p_cell} \\\\")
-    note = (f"0--100 sliders. Each cell shows ADHD ($n = {n_a}$) $|$ no-ADHD "
-            f"($n = {n_c}$). Mann-Whitney U per dimension "
-            f"({len(present)} exploratory, uncorrected tests).")
+        rows.append(f"{shade}{dim} & {cells} & {p_cell} \\\\")
+    note = "0--100 scale."
     body = "\n".join(rows)
     return f"""\\subsection*{{{esc(title)}}}
 \\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
-{{\\small
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} rrrrr rr@{{}}}}
+\\noindent{{\\small
+\\setlength{{\\tabcolsep}}{{4pt}}%
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} rrrrr r@{{}}}}
 \\toprule
-Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $U$ & $p$ \\\\
- & \\multicolumn{{5}}{{c}}{{ADHD\\,$|$\\,no-ADHD}} & & \\\\
+Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $p_U$ \\\\
+ & \\multicolumn{{5}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1164,13 +1160,13 @@ def build_pre_study(pre, qtext, groups, src):
     # Demographics above fill part of the page -> chart instruments start fresh.
     out.append("\\newpage\n")
     out.append(likert_summary_table(pre, qtext, groups, "PRE_NARS_", 14,
-                                    "NARS — Negative Attitudes towards Robots Scale",
+                                    "Negative Attitudes towards Robots Scale (NARS)",
                                     hint="LIKERT5"))
     out.append(likert_summary_table(pre, qtext, groups, "PRE_ASRS_", 18,
-                                    "ASRS v1.1 — Adult ADHD Self-Report Scale",
+                                    "Adult ADHD Self-Report Scale (ASRS)",
                                     hint="ASRS"))
     out.append(likert_summary_table(pre, qtext, groups, "PRE_ESQR_", 25,
-                                    "ESQ-R — Executive Skills Questionnaire (Revised)",
+                                    "Executive Skills Questionnaire Revised (ESQ-R)",
                                     hint="ESQR"))
     return "\n".join(out)
 
@@ -1183,7 +1179,7 @@ def build_post_control(ctrl, qtext, groups, src):
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
     out.append(slider_summary_table(ctrl, qtext, groups, tlx_cols,
-                                     "NASA-TLX (no-robot session)"))
+                                     "NASA Task Load Index (TLX) — no-robot session"))
     return "\n".join(out)
 
 
@@ -1191,14 +1187,14 @@ def build_post_robot(post, qtext, groups, src):
     out = [header_comment([src])]
     pag = Paginator()
     out.append(likert_summary_table(post, qtext, groups, "POST_NARS_", 14,
-                                    "NARS — Negative Attitudes towards Robots Scale",
+                                    "Negative Attitudes towards Robots Scale (NARS)",
                                     hint="LIKERT5"))
     out.append(likert_summary_table(post, qtext, groups, "POST_SUS_", 10,
-                                    "SUS — System Usability Scale", hint="LIKERT5"))
+                                    "System Usability Scale (SUS)", hint="LIKERT5"))
     tlx_cols = ["POST_TLX_MENTAL_1", "POST_TLX_PHYSICAL_1", "POST_TLX_TEMPORAL_1",
                 "POST_TLX_PERFORMANCE_1", "POST_TLX_EFFORT_1", "POST_TLX_FRUSTRATION_1"]
     out.append(slider_summary_table(post, qtext, groups, tlx_cols,
-                                     "NASA-TLX (robot session)"))
+                                     "NASA Task Load Index (TLX) — robot session"))
     out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_PRESENCE_", 3,
                                     "Body doubling", hint="LIKERT5"))
     out.append(likert_summary_table(post, qtext, groups, "POST_FEAT_INATT_", 5,
@@ -1973,6 +1969,18 @@ def _fmt_p(p: float) -> str:
     return f"$p = {p:.3f}$".replace("0.", ".", 1)
 
 
+def _p_sub(p_str: str, sub: str) -> str:
+    """Subscript a formatted p ('$p = .123$' -> '$p_U = .123$'); the
+    test statistic itself is no longer reported (decided 05.09)."""
+    return p_str.replace("$p ", f"$p_{sub} ")
+
+
+def _p_val(p_str: str) -> str:
+    """Bare value for a table cell under a $p_U$/$p_W$ header
+    ('$p = .123$' -> '$.123$', '$p < .001$' -> '$< .001$')."""
+    return p_str.replace("$p = ", "$").replace("$p < ", "$< ")
+
+
 def _mwu_cells(a: pd.Series, c: pd.Series) -> tuple[str, str]:
     """(U, p) table cells for an ADHD-vs-Control Mann-Whitney U test."""
     a, c = a.dropna(), c.dropna()
@@ -2223,49 +2231,29 @@ def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
                   ESQR_SUBSCALES.items(),
                   ["Plan\\\\mgmt.", "Time\\\\mgmt.", "Materials\\\\org.",
                    "Emotional\\\\reg.", "Behavioral\\\\reg."])])
-    esq_rows, esq_cols, pass_lal, pass_mid = [], [], [], []
+    esq_rows = []
     for name, short, items in scales:
         ma = mean_items(pre_a, "PRE_ESQR_", items, scale_max=3)
         mc = mean_items(pre_c, "PRE_ESQR_", items, scale_max=3)
-        u, p = _mwu_cells(ma, mc)
+        _, p = _mwu_cells(ma, mc)
         esq_rows.append(f"{esc(name)} & {ma.mean():.2f} ({ma.std(ddof=1):.2f})"
-                        f" & {mc.mean():.2f} ({mc.std(ddof=1):.2f}) & {u} & "
-                        f"{p} \\\\")
-        esq_cols.append((short, [(ADHD_COLOR, ma), (CTRL_COLOR, mc)]))
-        if name != scales[0][0]:
-            if ma.mean() > 1.125:
-                pass_lal.append(name)
-            if ma.mean() > 1.5:
-                pass_mid.append(name)
-    out.append("\\subsection*{ESQ-R — executive skills (pre-study)}\n"
+                        f" & {mc.mean():.2f} ({mc.std(ddof=1):.2f}) & "
+                        f"{_p_val(p)} \\\\")
+    out.append("\\subsection*{Executive Skills Questionnaire Revised "
+               "(ESQ-R) — pre-study}\n"
                "\\noindent{\\small Coded 0--3 (official 4-point response "
-               "scale). Lalwani et al.'s ``above 2.5 on a 1--5 scale'' "
-               "criterion maps linearly to $> 1.125$ on 0--3; the scale "
-               "midpoint is 1.5 (2.5 is not the 1--5 midpoint). ADHD-group "
-               "subscale means above the Lalwani criterion: "
-               + (esc("; ".join(pass_lal)) or "none")
-               + ". Above the midpoint: "
-               + (esc("; ".join(pass_mid)) or "none")
-               + ". Group comparisons: Mann-Whitney U, six uncorrected "
-               "tests.}\\par\\vspace{0.4em}\n")
+               "scale).}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrrr}
+\\begin{tabular}{lrrr}
 \\toprule
-Scale & ADHD & No-ADHD & $U$ & $p$ \\\\
- & \\multicolumn{2}{c}{mean (SD)} & & \\\\
+Scale & ADHD & No-ADHD & $p_U$ \\\\
+ & \\multicolumn{2}{c}{mean (SD)} & \\\\
 \\midrule
 """ + "\n".join(esq_rows) + """
 \\bottomrule
 \\end{tabular}
 \\end{center}
 """)
-    out.append("\\begin{center}\n"
-               + _box_chart(esq_cols, ylabel="ESQ-R mean item score (0--3)",
-                            width="0.85\\textwidth", ymax=3,
-                            reflines=[(1.125, "Lalwani criterion"),
-                                      (1.5, "scale midpoint")])
-               + "\n\\end{center}\n"
-               "\\noindent{\\small " + legend_box + "}\\par\n")
 
     # ------------------------------------------------------------ NARS
     items = list(range(1, N_NARS_ITEMS + 1))
@@ -2277,220 +2265,101 @@ Scale & ADHD & No-ADHD & $U$ & $p$ \\\\
                         index=post["PID"])
     both = pd.concat([pre_by, post_by], axis=1,
                      keys=["pre", "post"]).dropna()
-    w, wp, wn = _wilcoxon_cells(both["pre"], both["post"])
+    _, wp, wn = _wilcoxon_cells(both["pre"], both["post"])
     change = both["post"] - both["pre"]
-    ch_a = change[change.index.isin(pids_a)]
-    ch_c = change[~change.index.isin(pids_a)]
-    cu, cp = _mwu_cells(ch_a, ch_c)
     nars_rows = []
     for label, sel in (("Pre", both["pre"]), ("Post", both["post"]),
                        ("Change (post $-$ pre)", change)):
         sa = sel[sel.index.isin(pids_a)]
         sc = sel[~sel.index.isin(pids_a)]
+        _, p = _mwu_cells(sa, sc)
         nars_rows.append(f"{label} & {sa.mean():.2f} ({sa.std(ddof=1):.2f}) & "
                          f"{sc.mean():.2f} ({sc.std(ddof=1):.2f}) & "
-                         f"{sel.mean():.2f} ({sel.std(ddof=1):.2f}) \\\\")
-    out.append("\\subsection*{NARS — attitude change (pre vs post)}\n"
+                         f"{_p_val(p)} \\\\")
+    out.append("\\subsection*{Negative Attitudes towards Robots Scale "
+               "(NARS) — pre vs post}\n"
                "\\noindent{\\small Mean item score over the 14 items "
                "(1--5, items 3, 5, 6 reverse-coded; higher = more negative "
                "attitude).}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
 \\begin{tabular}{lrrr}
 \\toprule
- & ADHD & No-ADHD & Overall \\\\
- & \\multicolumn{3}{c}{mean (SD)} \\\\
+ & ADHD & No-ADHD & $p_U$ \\\\
+ & \\multicolumn{2}{c}{mean (SD)} & \\\\
 \\midrule
 """ + "\n".join(nars_rows) + f"""
 \\bottomrule
 \\end{{tabular}}\\\\[2pt]
 {{\\footnotesize Paired Wilcoxon pre vs post (all participants): """
-               f"$W = {w}$, {wp} ($n = {wn}$). Change score ADHD vs "
-               f"no-ADHD: Mann-Whitney $U = {cu}$, {cp}.}}\n"
+               f"{_p_sub(wp, 'W')} ($n = {wn}$).}}\n"
                "\\end{center}\n")
-    out.append("\\begin{center}\n"
-               + _paired_lines_chart(both, groups,
-                                     ylabel="NARS mean item score (1--5)")
-               + "\n\\end{center}\n"
-               "\\noindent{\\small Thin lines: individual participants; "
-               "bold lines: group medians. \\textcolor{ApxADHD}"
-               "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
-               "{\\rule{2ex}{1.2ex}} no-ADHD group.}\\par\n")
 
     # ------------------------------------------------------------ TLX
-    tlx_rows, tlx_cols = [], []
+    tlx_rows = []
     for dim in TLX_DIMS:
         col = f"POST_TLX_{dim}_1"
         r = post.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         c = ctrl.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         pair = pd.concat([r, c], axis=1, keys=["robot", "control"]).dropna()
-        w, p, n = _wilcoxon_cells(pair["robot"], pair["control"])
+        _, p, n = _wilcoxon_cells(pair["robot"], pair["control"])
         tlx_rows.append(
             f"{dim.capitalize()} & "
             f"{pair['robot'].mean():.1f} ({pair['robot'].std(ddof=1):.1f}) & "
             f"{pair['control'].mean():.1f} ({pair['control'].std(ddof=1):.1f})"
-            f" & {n} & {w} & {p} \\\\")
-        tlx_cols.append((dim.capitalize(),
-                         [(COND_ROBOT_COLOR, r), (COND_CTRL_COLOR, c)]))
-    out.append("\\subsection*{NASA-TLX — workload by condition}\n"
+            f" & {n} & {_p_val(p)} \\\\")
+    out.append("\\subsection*{NASA Task Load Index (TLX) — workload "
+               "by condition}\n"
                "\\noindent{\\small 0--100 sliders, paired within-subject "
                "(Wilcoxon signed-rank); six uncorrected comparisons — "
                "apply multiple-testing caution when reporting."
                "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrrrr}
+\\begin{tabular}{lrrrr}
 \\toprule
-Dimension & Robot & No-Robot & $n$ & $W$ & $p$ \\\\
- & \\multicolumn{2}{c}{mean (SD)} & & & \\\\
+Dimension & Robot & No-Robot & $n$ & $p_W$ \\\\
+ & \\multicolumn{2}{c}{mean (SD)} & & \\\\
 \\midrule
 """ + "\n".join(tlx_rows) + """
 \\bottomrule
 \\end{tabular}
 \\end{center}
 """)
-    out.append("\\begin{center}\n"
-               + _box_chart(tlx_cols, ylabel="NASA-TLX rating (0--100)",
-                            width="0.9\\textwidth", ymax=100)
-               + "\n\\end{center}\n"
-               "\\noindent{\\small " + legend_cond + "}\\par\n")
 
     # ------------------------------------------------------------ SUS
     sus = sus_scores(post)
     sus_a, sus_c = by_group(post, sus)
-    su, sp = _mwu_cells(sus_a, sus_c)
-    sus_rows = []
-    for label, s in ((GROUP_ADHD, sus_a), (GROUP_CONTROL, sus_c),
-                     ("Overall", sus)):
-        s = s.dropna()
-        sus_rows.append(
-            f"{label} & {len(s)} & {s.mean():.1f} ({s.std(ddof=1):.1f}) & "
-            f"{s.median():.1f} [{s.quantile(.25):.1f}; "
-            f"{s.quantile(.75):.1f}] & {s.min():.1f}--{s.max():.1f} \\\\")
-    out.append("\\subsection*{SUS — system usability (robot condition)}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrrr}
+    _, sp = _mwu_cells(sus_a, sus_c)
+    sa, sc = sus_a.dropna(), sus_c.dropna()
+    out.append("\\subsection*{System Usability Scale (SUS) — "
+               "robot condition}\n")
+    out.append(f"""\\begin{{center}}\\small
+\\begin{{tabular}}{{lrrr}}
 \\toprule
- & $n$ & Mean (SD) & Median [$Q_1$; $Q_3$] & Range \\\\
+ & ADHD & No-ADHD & $p_U$ \\\\
+ & \\multicolumn{{2}}{{c}}{{mean (SD)}} & \\\\
 \\midrule
-""" + "\n".join(sus_rows) + f"""
-\\bottomrule
+SUS (0--100) & {sa.mean():.1f} ({sa.std(ddof=1):.1f}) & """
+               f"{sc.mean():.1f} ({sc.std(ddof=1):.1f}) & "
+               f"{_p_val(sp)} \\\\\n"
+               f"""\\bottomrule
 \\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Mann-Whitney U ADHD vs no-ADHD: $U = {su}$, {sp}. """
-               "Bangor et al.'s multi-study mean is 68; Lalwani et al. "
-               "report a mean of 76 ($n = 15$).}\n\\end{center}\n")
-    out.append("\\begin{center}\n"
-               + _box_chart([("ADHD", [(ADHD_COLOR, sus_a)]),
-                             ("No-ADHD", [(CTRL_COLOR, sus_c)]),
-                             ("Overall", [("gray", sus)])],
-                            ylabel="SUS score (0--100)",
-                            width="0.5\\textwidth", ymax=100,
-                            reflines=[(68, "Bangor mean 68")])
-               + "\n\\end{center}\n"
-               "\\noindent{\\small " + legend_box + "}\\par\n")
-
-    # ------------------------------------------- use again / recommend
-    ua_rows = []
-    for col, label in (("POST_FEAT_OVERALL_2", "Would use again"),
-                       ("POST_FEAT_OVERALL_3", "Would recommend")):
-        v = to_rank(post[col], "LIKERT5")
-        a, c = by_group(post, v)
-        ua_rows.append(
-            f"{label} & {int((a >= 4).sum())}/{int(a.notna().sum())} & "
-            f"{int((c >= 4).sum())}/{int(c.notna().sum())} & "
-            f"{int((v >= 4).sum())}/{int(v.notna().sum())} \\\\")
-    out.append("\\subsection*{Would use again / recommend}\n"
-               "\\noindent{\\small Participants answering agree or strongly "
-               "agree ($\\geq 4$ on the 5-point item). Lalwani et al.\\ "
-               "report 12/15 for both. Full response distributions for "
-               "these items appear in the post-study questionnaire "
-               "charts.}\\par\\vspace{0.4em}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrr}
-\\toprule
- & ADHD & No-ADHD & Overall \\\\
-\\midrule
-""" + "\n".join(ua_rows) + """
-\\bottomrule
-\\end{tabular}
-\\end{center}
-""")
+{{\\footnotesize Medians [$Q_1$; $Q_3$]: ADHD {sa.median():.1f} """
+               f"[{sa.quantile(.25):.1f}; {sa.quantile(.75):.1f}] "
+               f"(range {sa.min():.1f}--{sa.max():.1f}, $n = {len(sa)}$); "
+               f"no-ADHD {sc.median():.1f} [{sc.quantile(.25):.1f}; "
+               f"{sc.quantile(.75):.1f}] (range {sc.min():.1f}--"
+               f"{sc.max():.1f}, $n = {len(sc)}$).}}\n\\end{{center}}\n")
 
     # ------------------------------------------------- feature ratings
-    feat_rows = []
-    for title, prefix, n_items in FEATURE_BLOCKS:
-        feat_rows.append(f"\\multicolumn{{6}}{{l}}{{\\itshape "
-                         f"{esc(title)}}} \\\\")
-        for i in range(1, n_items + 1):
-            col = f"{prefix}{i}"
-            v = to_rank(post[col], "LIKERT5")
-            a, c = by_group(post, v)
-            u, p = _mwu_cells(a, c)
-            label = strip_stem(q_post.get(col, col))
-            if len(label) > 58:
-                label = label[:57].rstrip() + "…"
-            feat_rows.append(f"\\;Q{i}: {esc(label)} & {a.mean():.2f} & "
-                             f"{c.mean():.2f} & {v.mean():.2f} & {u} & "
-                             f"{p} \\\\")
+    # The polished table (rotated block labels, siunitx columns) is
+    # generated by generate_results.py as results-charts/feature_stats.tex
+    # and synced to the thesis repo; reference it instead of maintaining a
+    # duplicate here (decided 05.09).
     out.append("\\subsection*{Feature ratings (robot condition, 1--5)}\n"
                "\\noindent{\\small Group means with Mann-Whitney U per item "
-               "(15 uncorrected exploratory tests). The grouped-bar chart "
-               "of these means is generated separately for the results "
-               "section (generate\\_results.py).}\\par\\vspace{0.4em}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{p{7.6cm}rrrrr}
-\\toprule
-Item & ADHD & No-ADHD & Overall & $U$ & $p$ \\\\
- & \\multicolumn{3}{c}{mean} & & \\\\
-\\midrule
-""" + "\n".join(feat_rows) + """
-\\bottomrule
-\\end{tabular}
-\\end{center}
-""")
-
-    # ------------------------------------------- frustration mechanism
-    mech = frustration_mechanism(post, ctrl)
-    fr_rows = []
-    for key, label in FRUSTRATION_PREDICTORS:
-        sub = mech.dropna(subset=[key, "fr_delta"])
-        if len(sub) < 3:
-            fr_rows.append(f"{esc(label)} & -- & -- & {len(sub)} \\\\")
-            continue
-        r = scistats.spearmanr(sub[key], sub["fr_delta"])
-        fr_rows.append(f"{esc(label)} & ${r.statistic:+.3f}$ & "
-                       f"{_fmt_p(r.pvalue)} & {len(sub)} \\\\")
-    out.append("\\subsection*{TLX frustration mechanism (exploratory)}\n"
-               "\\noindent{\\small Spearman correlations between "
-               "robot-session behaviour (parsed logs) and the "
-               "robot-minus-no-robot TLX frustration delta. Seven "
-               "uncorrected exploratory tests — a single nominal hit among "
-               "them would itself require correction. Latency and "
-               "turn-based rows have $n = 16$: one participant interacted "
-               "via text only (no spoken turns)."
+               "(15 uncorrected exploratory tests)."
                "}\\par\\vspace{0.4em}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrr}
-\\toprule
-Robot-session metric & Spearman $\\rho$ & $p$ & $n$ \\\\
-\\midrule
-""" + "\n".join(fr_rows) + """
-\\bottomrule
-\\end{tabular}
-\\end{center}
-""")
-    sc = pd.DataFrame({"x": mech.set_index("pid")["robot_min"],
-                       "y": mech.set_index("pid")["fr_delta"]})
-    out.append("\\begin{center}\n"
-               + _scatter_chart(sc, groups,
-                                xlabel="Robot talk-time (min)",
-                                ylabel="TLX frustration delta "
-                                       "(robot $-$ no-robot)",
-                                hline=0)
-               + "\n\\end{center}\n"
-               "\\noindent{\\small The strongest "
-               "of the seven correlations. Dashed line: no difference "
-               "between conditions. \\textcolor{ApxADHD}"
-               "{\\rule{2ex}{1.2ex}} ADHD, \\textcolor{ApxControl}"
-               "{\\rule{2ex}{1.2ex}} no-ADHD group.}\\par\n")
+    out.append("\\input{results-charts/feature_stats}\n")
     return "\n".join(out)
 
 
@@ -2502,243 +2371,77 @@ def build_session_stats(groups: dict[str, str]) -> str:
     if gn:
         out.append("\\noindent{\\small\\itshape " + gn +
                    "}\\par\\vspace{0.6em}\n")
-    met = {(pid, cond): session_metrics(d, cond)
-           for (pid, cond), d in sdirs.items() if pid in groups}
-    n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
-    legend_box = ("\\textcolor{ApxADHD}{\\rule{2ex}{1.2ex}} ADHD "
-                  f"($n = {n_a}$), "
-                  "\\textcolor{ApxControl}{\\rule{2ex}{1.2ex}} no-ADHD "
-                  f"($n = {len(groups) - n_a}$); boxes span the quartiles, "
-                  "whiskers extend to the furthest value within 1.5 IQR, "
-                  "dots are outliers.")
-
-    out.append("\\subsection*{Session metrics — robot sessions}\n"
-               "\\noindent{\\small Robot responses = completed assistant "
-               "responses (one per realtime response, including "
-               "intervention utterances and context acknowledgments). "
-               "User turns = maximal runs of consecutive user-transcript "
-               "events; a robot response landing mid-speech starts a new "
-               "user turn. Raw transcript-event counts are NOT turns: the "
-               "app re-logs the growing transcript on every incremental "
-               "update.}\\par\\vspace{0.4em}\n")
-    out.append(_session_metrics_table(met, groups, "Robot", _ROBOT_METRICS))
-    out.append("\\begin{center}\n"
-               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[:2],
-                                ylabel="Turns", width="0.40\\textwidth")
-               + "\\hfill\n"
-               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[2:4],
-                                ylabel="Minutes", width="0.40\\textwidth")
-               + "\n\n\\vspace{0.6em}\n"
-               + _boxplot_panel(met, groups, "Robot", _ROBOT_METRICS[4:],
-                                ylabel="Count", width="0.55\\textwidth")
-               + "\n\\end{center}\n"
-               + "\\noindent{\\small " + legend_box + "}\\par\n")
-
-    out.append("\\subsection*{Session metrics — no-robot sessions "
-               "(counterfactuals)}\n"
-               "\\noindent{\\small Counterfactual interventions are logged "
-               "at the moment the deployed gate logic would have fired, but "
-               "nothing is delivered. They are an upper bound on what the "
-               "robot condition would have sent: with no conversation in the "
-               "no-robot session, the 60-second interaction cooldown is only "
-               "ever reset by a counterfactual itself, so gating is strictly "
-               "looser than in the robot condition. For signal series "
-               "failing the coverage gate (note at the top of this "
-               "section), the logged counts are additionally deflated by "
-               "the sensing outages themselves.}\\par\\vspace{0.4em}\n")
-    out.append(_session_metrics_table(met, groups, "Control", _CTRL_METRICS))
-    out.append("\\begin{center}\n"
-               + _boxplot_panel(met, groups, "Control", _CTRL_METRICS,
-                                ylabel="Count", width="0.48\\textwidth")
-               + "\n\\end{center}\n"
-               + "\\noindent{\\small " + legend_box + "}\\par\n")
-
-    ep, spans = episode_records(groups, sdirs)
-    out.append("\\subsection*{Below-threshold episodes}\n"
-               "\\noindent{\\small An episode is at least two consecutive "
-               "polls with the monitor signal past its threshold (engagement "
-               "rolling average $< 0.80$; windowed negative share $> 0.60$). "
-               "Recovery is the time from episode start to the first poll "
-               "back at threshold; a sensing gap of more than 30 seconds or "
-               "the session end censors an episode (recovery unobserved). "
-               "Cued = an intervention (robot) or counterfactual (no-robot) "
-               "fired during the episode. NB the cued and uncued rows must "
-               "not be compared directly: an episode only receives a cue if "
-               "it survives until the intervention gates open, so "
-               "fast-recovering episodes are uncued by construction (see the "
-               "landmark analysis below). Signal series failing the "
-               "coverage gate (note at the top of this section) are "
-               "excluded here and in all analyses below."
-               "}\\par\\vspace{0.4em}\n")
-    out.append(_episode_table(ep))
-
-    lm_rows, naive_txt = [], []
-    for sig, signame in (("eng", "Engagement"), ("emo", "Negative emotion")):
-        sub = ep[(ep.sig == sig) & (ep.cond == "Robot")]
-        cued, supd = sub[sub.cued].dur.dropna(), sub[~sub.cued].dur.dropna()
-        if len(cued) and len(supd):
-            naive_txt.append(f"{signame.lower()}: delivered median "
-                             f"{cued.median():.0f}\\,s (n={len(cued)}) vs "
-                             f"suppressed {supd.median():.0f}\\,s "
-                             f"(n={len(supd)})")
-        for lm, lm_label in (("start", "cue start"), ("end", "cue-utterance end")):
-            d, m = landmark_pairs(sub, lm)
-            if len(d) < 5:
-                lm_rows.append(f"{signame} & {lm_label} & {len(d)} & -- & -- "
-                               "& -- & -- \\\\")
+    # Camera comparability check (simplified 05.09): the sections that
+    # duplicated the main-report analyses (session metrics, episodes,
+    # landmark recovery, cross-condition, counterfactual replay) were
+    # removed; only this sensor-validity check remains. Speech-excluded
+    # robot-session means vs no-robot means of both signals, per group
+    # and combined, matching the mean-score definition in the results
+    # tables (quiet_signal_mean over speech_exclusions).
+    gated = gated_signals(sdirs)
+    vals = {}
+    for (pid, cond), d in sdirs.items():
+        if pid not in groups:
+            continue
+        excl = speech_exclusions(d)
+        for sig in ("eng", "emo"):
+            if (pid, cond, sig) in gated:
                 continue
-            w, p, n = _wilcoxon_cells(d, m)
-            lm_rows.append(
-                f"{signame} & {lm_label} & {n} & {d.median():.0f} & "
-                f"{m.median():.0f} & {w} & {p} \\\\")
-    out.append("\\subsection*{Recovery after a cue — within robot sessions}\n"
-               "\\noindent{\\small Risk-set matched landmark comparison: for "
-               "each cue-delivered episode, the remaining time below "
-               "threshold from the landmark is paired with the median "
-               "remaining time of the gate-suppressed episodes still "
-               "ongoing at the same elapsed time (at least three at risk), "
-               "Wilcoxon signed-rank over delivered episodes. This corrects "
-               "the immortal-time bias of the naive comparison ("
-               + "; ".join(naive_txt) +
-               "), which is length-biased and not evidence. From the "
-               "cue-start landmark the delivered side still contains the "
-               "cue utterance itself and its signal contamination; the "
-               "cue-utterance-end landmark is the fairer variant. Residual "
-               "caveats: gating follows conversation timing (not "
-               "randomised) and episodes pool across participants."
-               "}\\par\\vspace{0.4em}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{llrrrrr}
-\\toprule
-Signal & Landmark & $n$ & \\multicolumn{2}{c}{Remaining below threshold (s), median} & $W$ & $p$ \\\\
- & & & delivered & matched suppressed & & \\\\
-\\midrule
-""" + "\n".join(lm_rows) + """
-\\bottomrule
-\\end{tabular}
-\\end{center}
-""")
-
-    cc_rows = []
-    dur_cols, pct_cols = [], []
-    for sig, signame, short in (("eng", "Engagement", "Engagement"),
-                                ("emo", "Negative emotion", "Negative\\\\emotion")):
-        sub = ep[ep.sig == sig]
-        med = (sub.dropna(subset=["dur"])
-               .groupby(["pid", "cond"]).dur.median().unstack())
-        # %-past-threshold on the speech-excluded timeline (05.09),
-        # consistent with the results tables: 100 - quiet_within_pct.
-        pct_vals = {}
-        for (p, cond, s2) in spans:
-            if s2 != sig:
-                continue
-            v = quiet_within_pct(sdirs[(p, cond)], (sig,))
+            v = quiet_signal_mean(d, sig, excl)
             if v is not None:
-                pct_vals[(p, cond)] = 100.0 - v
-        pct = pd.Series(pct_vals).unstack().reindex(
-            columns=["Robot", "Control"])
-        for label, df in (("Median recovery (s), paired", med),
-                          ("\\% of observed time past threshold", pct)):
-            if not {"Robot", "Control"} <= set(df.columns):
-                cc_rows.append(f"{signame} & {label} & -- & -- & -- & -- & -- \\\\")
-                continue
-            w, p, n = _wilcoxon_cells(df["Robot"], df["Control"])
-            r_md, c_md = df["Robot"].median(), df["Control"].median()
-            cc_rows.append(f"{signame} & {label} & {r_md:.1f} & {c_md:.1f} & "
-                           f"{n} & {w} & {p} \\\\")
-        dur_cols.append((short, [
-            (COND_ROBOT_COLOR, sub[sub.cond == "Robot"].dur.dropna()),
-            (COND_CTRL_COLOR, sub[sub.cond == "Control"].dur.dropna())]))
-        pct_cols.append((short, [
-            (COND_ROBOT_COLOR, pct["Robot"]), (COND_CTRL_COLOR, pct["Control"])]))
-    out.append("\\subsection*{Cross-condition recovery and time past "
-               "threshold}\n"
-               "\\noindent{\\small Paired within-subject comparisons "
-               "(Wilcoxon signed-rank). Median recovery uses participants "
-               "with at least one uncensored episode in both sessions; "
-               "time past threshold uses all participants over the "
-               "speech-excluded timeline (samples during user/robot "
-               "speech and the 10\\,s after each segment are excluded, "
-               "with exact interval subtraction; sensing gaps above "
-               "30\\,s do not count as observed time)."
-               "}\\par\\vspace{0.4em}\n")
-    out.append("""\\begin{center}\\small
-\\begin{tabular}{llrrrrr}
-\\toprule
-Signal & Metric & Robot & No-Robot & $n$ & $W$ & $p$ \\\\
- & & \\multicolumn{2}{c}{median} & & & \\\\
-\\midrule
-""" + "\n".join(cc_rows) + """
-\\bottomrule
-\\end{tabular}
-\\end{center}
-""")
-    legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
-                   "session, \\textcolor{ApxCondControl}{\\rule{2ex}{1.2ex}} "
-                   "no-robot session; boxes span the quartiles, whiskers "
-                   "extend to the furthest value within 1.5 IQR, dots are "
-                   "outliers.")
-    out.append("\\begin{center}\n"
-               + _box_chart(dur_cols, ylabel="Episode recovery (s)",
-                            width="0.42\\textwidth")
-               + "\\hfill\n"
-               + _box_chart(pct_cols,
-                            ylabel="\\% time past threshold",
-                            width="0.42\\textwidth")
-               + "\n\\end{center}\n"
-               "\\noindent{\\small Left: pooled uncensored episode "
-               "durations. Right: per-participant share of observed time "
-               "past threshold. " + legend_cond + "}\\par\n")
-
-    q = quiet_engagement_medians(groups, sdirs)
-    qrows = []
-    for label, s in (("Robot session (all samples)", q["robot_all"]),
-                     ("Robot session (quiet samples only)", q["robot_quiet"]),
-                     ("No-Robot session", q["control"])):
-        s = s.dropna()
-        qrows.append(f"{label} & {s.median():.3f} "
-                     f"[{s.quantile(.25):.3f}; {s.quantile(.75):.3f}] \\\\")
-    wq, pq, nq = _wilcoxon_cells(q["robot_quiet"], q["control"])
-    wa, pa, na = _wilcoxon_cells(q["robot_all"], q["control"])
+                vals[(sig, cond, pid)] = v
+    ser = pd.Series(vals) if vals else pd.Series(dtype=float)
+    signame = {"eng": "Mean engagement score",
+               "emo": "Mean neg.-emotion share"}
+    cam_rows, foot_bits = [], []
+    for sig in ("eng", "emo"):
+        cam_rows.append(f"\\multicolumn{{4}}{{l}}{{\\itshape "
+                        f"{signame[sig]}}} \\\\")
+        r = ser.get((sig, "Robot"), pd.Series(dtype=float))
+        c = ser.get((sig, "Control"), pd.Series(dtype=float))
+        for cname, s_all in (("Robot (quiet)", r), ("No-Robot", c)):
+            cells = []
+            for scope in (GROUP_ADHD, GROUP_CONTROL, None):
+                s = (s_all if scope is None else
+                     s_all[s_all.index.map(groups.get) == scope])
+                cells.append(f"{s.mean():.3f} ({s.std(ddof=1):.3f})"
+                             if len(s) > 1 else "--")
+            cam_rows.append(f"\\;{cname} & " + " & ".join(cells)
+                            + " \\\\")
+        parts = []
+        for slabel, scope in (("ADHD", GROUP_ADHD),
+                              ("no-ADHD", GROUP_CONTROL), ("all", None)):
+            rs = (r if scope is None else
+                  r[r.index.map(groups.get) == scope])
+            cs = (c if scope is None else
+                  c[c.index.map(groups.get) == scope])
+            _, p, n = _wilcoxon_cells(rs, cs)
+            parts.append(f"{slabel} {_p_sub(p, 'W')} ($n = {n}$)")
+        foot_bits.append(("engagement" if sig == "eng" else
+                          "neg.-emotion") + ": " + ", ".join(parts))
     out.append("\\subsection*{Camera comparability check}\n"
-               "\\noindent{\\small The two conditions sense engagement "
+               "\\noindent{\\small The two conditions sense the signals "
                "through different cameras (robot head camera vs webcam at "
-               "the same position). Per-session medians of the raw "
-               "engagement score, with robot-session samples within "
-               f"{QUIET_BUFFER_S:.0f}\\,s after any speech excluded in the "
-               "quiet-only row: a robot-vs-no-robot offset that persists "
-               "outside interaction windows would indicate an "
-               "optics/geometry artefact rather than head motion during "
-               "speech. Engagement series failing the coverage gate (note "
-               "at the top of this section) are excluded."
+               "the same position). Session means over the speech-excluded "
+               "timeline (samples during user/robot speech and the "
+               f"{SPEECH_EXCLUSION_BUFFER_S:.0f}\\,s after each segment "
+               "excluded, exact interval subtraction): a robot-vs-no-robot "
+               "offset that persists outside interaction windows would "
+               "indicate an optics/geometry artefact rather than head "
+               "motion during speech. Signal series failing the coverage "
+               "gate (note at the top of this section) are excluded."
                "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
-\\begin{tabular}{lr}
+\\begin{tabular}{lrrr}
 \\toprule
- & Median of per-session medians [$Q_1$; $Q_3$] \\\\
+ & ADHD & No-ADHD & All \\\\
+ & \\multicolumn{3}{c}{mean (SD)} \\\\
 \\midrule
-""" + "\n".join(qrows) + f"""
+""" + "\n".join(cam_rows) + f"""
 \\bottomrule
 \\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Paired Wilcoxon, robot quiet-only vs no-robot: """
-               f"$W = {wq}$, {pq} ($n = {nq}$); all samples vs no-robot: "
-               f"$W = {wa}$, {pa} ($n = {na}$).}}\n\\end{{center}}\n")
-
-    replay_tbl, dur = _replay_table(groups, sdirs, met)
-    out.append("\\subsection*{Counterfactual replay sensitivity}\n"
-               "\\noindent{\\small No-robot-session counterfactual counts "
-               "re-computed by replaying the deployed gate logic over the "
-               "logged poll series, with each fire additionally carrying the "
-               "gating footprint of an intervention utterance "
-               f"(mean {dur:.1f}\\,s across the robot sessions): the speaking "
-               "gate is closed while it plays and the interaction cooldown "
-               "restarts at its end. The zero-length replay reproduces the "
-               "deployed no-robot behaviour and validates the "
-               "re-implementation. Counts remain an upper bound: ordinary "
-               "conversation, the dominant intervention suppressor in the "
-               "robot sessions, has no counterpart in the no-robot condition and is "
-               "not simulated.}\\par\\vspace{0.4em}\n")
-    out.append(replay_tbl)
+{{\\footnotesize Paired Wilcoxon, Robot (quiet) vs No-Robot --- """
+               + "; ".join(foot_bits) + ".}\n\\end{center}\n")
     return "\n".join(out)
 
 
@@ -2757,23 +2460,16 @@ def build_session_logs(groups: dict[str, str]) -> str:
                    f"\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}\n"
                    + chart + ("" if last else "\n\\newpage\n"))
 
-    order_note = ("Rows: ADHD-group participants first, then the no-ADHD "
-                  "group (ascending within each).")
+    # legends trimmed to the essentials 05.09 (row order and the gating
+    # caveat moved to authored prose where needed)
     legend_int = ("Speech segments per participant over the 45-minute robot "
                   "session: \\textcolor{ApxUserSpeech}{\\rule{2ex}{1.2ex}} user, "
                   "\\textcolor{ApxRobotSpeech}{\\rule{2ex}{1.2ex}} robot, grey = no "
-                  "speech. " + order_note)
-    gating_note = ("A rolling value beyond the threshold does not necessarily "
-                   "trigger an intervention: the policy additionally requires "
-                   "no robot speech in progress and at least 60 seconds since "
-                   "both the last conversational exchange and the last "
-                   "intervention (cf. the intervention gates in the "
-                   "Methodology).")
+                  "speech.")
     legend_score = ("Thin grey line: per-poll value; black line: the 30-second "
                     "rolling value used by the intervention policy; dashed "
                     "line: the trigger threshold ({thr}); vertical "
-                    "{color} marks: {what}. Line gaps are sensing gaps. "
-                    + gating_note + " " + order_note)
+                    "{color} marks: {what}. Line gaps are sensing gaps.")
 
     sub("Interaction timelines (robot sessions)", legend_int,
         _interaction_chart(groups))
@@ -2785,7 +2481,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      lambda r: _float_or_none(r, "score"),
                      lambda r: _float_or_none(r, "average"),
                      0.80, {"intervention_engagement_sent"}, "ApxTrigEng"))
-    sub("Negative-emotion scores (robot sessions)",
+    sub("Emotion scores (robot sessions)",
         legend_score.format(thr="0.60",
                             color="\\textcolor{ApxTrigEmo}{green}",
                             what="delivered emotion interventions"),
@@ -2802,7 +2498,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
                      lambda r: _float_or_none(r, "score"),
                      lambda r: _float_or_none(r, "average"),
                      0.80, {"counterfactual_engagement"}, "ApxTrigEng"))
-    sub("Negative-emotion scores (no-robot sessions)",
+    sub("Emotion scores (no-robot sessions)",
         legend_score.format(thr="0.60",
                             color="\\textcolor{ApxTrigEmo}{green}",
                             what="counterfactual emotion interventions "
