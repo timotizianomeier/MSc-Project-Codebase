@@ -891,18 +891,19 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
             p_cell = _p_val(_fmt_p(u.pvalue))
         else:
             p_cell = "--"
+        # full question text, never truncated (decided 06.09) — the
+        # auto-height item box just wraps longer labels onto more lines
         label = strip_stem(qtext.get(col, col))
-        if len(label) > 78:
-            label = label[:77].rstrip() + "…"
         counts = " & ".join(
             f"{int((a == v).sum())}\\,$|$\\,{int((c == v).sum())}"
             for v in codes)
         shade = "\\rowcolor{gray!8} " if pos % 2 == 0 else ""
-        # Fixed two-line, vertically centred item box: every row gets the
-        # same height and the value cells sit at the row's vertical middle.
-        # NB height must be em-based — \baselineskip is 0 inside table cells.
-        item_box = (f"\\parbox[c][3.1em][c]{{6.3cm}}"
-                    f"{{Q{i}: {esc(label)}}}")
+        # Auto-height, vertically centred item box (fixed 3.1em height
+        # overflowed once the table went \small, 06.09): the row grows
+        # with the wrapped label and the value cells stay at its middle;
+        # the inner \vspace pair keeps neighbouring rows from touching.
+        item_box = (f"\\parbox[c]{{6.3cm}}{{\\vspace{{2.5pt}}"
+                    f"Q{i}: {esc(label)}\\vspace{{2.5pt}}}}")
         rows.append(
             f"{shade}{item_box} & {counts} & "
             f"{_fmt_pair(a.mean(), c.mean())} & "
@@ -918,9 +919,9 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
     body = "\n".join(rows)
     return f"""\\subsection*{{{esc(title)}}}
 {note}{{\\small
-\\setlength{{\\tabcolsep}}{{3.5pt}}
+\\setlength{{\\tabcolsep}}{{3.2pt}}
 \\setlength{{\\LTleft}}{{0pt}}\\setlength{{\\LTright}}{{0pt}}
-\\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}rrrr@{{}}}}
+\\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}cccc@{{}}}}
 \\toprule
 Item & {code_heads} & Mean & Md & SD & $p_U$ \\\\
  & \\multicolumn{{{k + 3}}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
@@ -964,7 +965,7 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
 \\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
 \\noindent{{\\small
 \\setlength{{\\tabcolsep}}{{4pt}}%
-\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} rrrrr r@{{}}}}
+\\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} ccccc c@{{}}}}
 \\toprule
 Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $p_U$ \\\\
  & \\multicolumn{{5}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
