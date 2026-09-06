@@ -1281,21 +1281,7 @@ Measure & {{$n$}} & {{LMM}} & {{GEE}} & {{$p_U(\\Delta)$}} &
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular*}}\\par\\vspace{{0.4em}}
-\\noindent{{\\small Gaussian linear mixed model per metric:
-value $\\sim$ condition $\\times$ group with a random intercept per
-participant; factors effects-coded ($\\pm 0.5$), so each main-effect
-coefficient is that factor's effect averaged over the other; Wald
-$p$-values (REML). GEE = Poisson generalized estimating equations with
-robust standard errors (intervention counts only). $n$ =
-sessions/participants entering the model (participants with one usable
-session included; the paired and delta tests use their usual pairings).
-$p_U(\\Delta)$/$p_t(\\Delta)$: Mann-Whitney~$U$ / Welch $t$ on
-per-participant Robot$-$No-Robot deltas between groups; $p_W$/$p_t$:
-paired Wilcoxon / paired $t$ across conditions; group $p_U$/$p_t$:
-Mann-Whitney~$U$ / Welch $t$ on condition-pooled per-participant means.
-Signal metrics carry the speech exclusion.}}\\par
-\\endgroup"""
+\\end{{tabular*}}\\par\\endgroup"""
 
 
 def table_glmm_comparison(post, qtext, groups):
@@ -1682,11 +1668,18 @@ def _render_suggestions_table(*, cat_w, stmt_w, size,
     lines = []
     for category, items in cats:
         items = sorted(items, key=lambda it: -it[1])
-        cat_txt = (category.replace(" ", "\\newline ")
-                   if break_cats else category)
+        # break_cats: one category word per ROW (not a multi-line first
+        # cell, which left an apparent blank line under row one) so
+        # "detection" sits level with the second suggestion.
+        words = category.split()
         for i, (stmt, n) in enumerate(items):
             pct = round(100 * n / _SUGGESTIONS_N_ADHD)
-            cat_cell = f"\\textbf{{{cat_txt}}}" if i == 0 else ""
+            if break_cats:
+                w = words[i:] if i == len(items) - 1 else words[i:i + 1]
+                cat_cell = (f"\\textbf{{{'\\newline '.join(w)}}}"
+                            if w else "")
+            else:
+                cat_cell = f"\\textbf{{{category}}}" if i == 0 else ""
             keep = "*" if i < len(items) - 1 else ""
             lines.append(f"{cat_cell} & {stmt} & {n} ({pct}\\%) "
                          f"\\\\{keep}")
