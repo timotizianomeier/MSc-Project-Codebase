@@ -1634,7 +1634,7 @@ _SUGGESTIONS = [
     # re-coded 05.09.2026: categories now mirror the system's feature
     # taxonomy (cf. the feature-ratings blocks)
     ("Inattention detection", [
-        ("Improve accuracy, less interruptions", 5),
+        ("Improve accuracy, fewer interruptions", 5),
         ("Prefer strictly rule-based check-ins", 2),
         ("Add manual override for interventions", 1),
     ]),

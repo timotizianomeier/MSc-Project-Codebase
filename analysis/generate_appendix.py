@@ -204,6 +204,11 @@ def esc(text) -> str:
         if ch == "\\":
             continue
         s = s.replace(ch, rep)
+    # straight double quotes render as two closing quotes in pdflatex
+    # (06.09): turn paired quotes into ``...''; a stray unpaired quote
+    # becomes a closing one.
+    s = re.sub(r'"([^"]*)"', r"``\1''", s)
+    s = s.replace('"', "''")
     # collapse newlines inside answers
     s = re.sub(r"\s*\n\s*", r" \\newline ", s)
     return s
