@@ -1339,9 +1339,9 @@ def _layout(sessions: list[tuple[int, str]], groups: dict[str, str]):
         rows.append((pid, d, base))
     headers = [("ADHD", ymax + 0.05)]
     if split:
-        # top edge of the first control row is (ymax - n_adhd - gap):
+        # top edge of the first no-ADHD row is (ymax - n_adhd - gap):
         # base = ymax - (n_adhd+1) - gap, +1 for the row height.
-        headers.append(("Control", ymax - n_adhd - gap + 0.05))
+        headers.append(("No-ADHD", ymax - n_adhd - gap + 0.05))
     return rows, ymax, headers
 
 

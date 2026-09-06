@@ -1697,13 +1697,16 @@ def _render_suggestions_table(*, cat_w, stmt_w, size,
 
 
 def chart_interaction_excerpt(post, qtext, groups):
-    """Main-report excerpt of the appendix interaction timelines:
-    display P5, P7, P9, P15 (true PIDs 15, 17, 19, 25; picked 05.09).
-    Requires the apx colour definitions (ApxSilence/ApxUserSpeech/
-    ApxRobotSpeech) from apx_preamble_snippet in the preamble."""
+    """Main-report excerpt of the appendix interaction timelines: all
+    ADHD-group participants (widened from four 06.09); the full chart
+    incl. the No-ADHD group stays in the appendix. No gutter header —
+    the caption identifies the group. Requires the apx colour
+    definitions (ApxSilence/ApxUserSpeech/ApxRobotSpeech) from
+    apx_preamble_snippet in the preamble."""
     from generate_appendix import _interaction_chart
+    adhd = {int(p) for p, g in groups.items() if g == GROUP_ADHD}
     return "interaction_timeline_excerpt", _interaction_chart(
-        groups, pids={15, 17, 19, 25}, group_headers=False)
+        groups, pids=adhd, group_headers=False)
 
 
 def table_suggestions(post, qtext, groups):
