@@ -1254,30 +1254,43 @@ def _render_glmm_table(groups, *, size, colsep,
     GEE interaction p for the count metrics. Lazy import so the rest of
     the pipeline keeps running without statsmodels."""
     rows = _glmm_rows_cached(groups)
-    keys = ("p_int_lmm", "p_int_gee", "p_int_u", "p_int_t",
-            "p_cond_lmm", "p_cond_w", "p_cond_t",
-            "p_grp_lmm", "p_grp_u", "p_grp_t")
+    # t twins dropped 07.09 (Nicole: report only one test); cell means
+    # added the same day so the actual group averages sit next to the
+    # model components.
+    keys = ("m_ra", "m_rn", "m_ca", "m_cn",
+            "p_int_lmm", "p_int_gee", "p_int_u",
+            "p_cond_lmm", "p_cond_w",
+            "p_grp_lmm", "p_grp_u")
 
-    def cell(p):
-        if p != p:
+    def cell(v):
+        if isinstance(v, str):
+            return _scell(v)
+        if v != v:
             return "{--}"
-        return "{$<.001$}" if p < 0.001 else f"{p:.3f}"
+        return "{$<.001$}" if v < 0.001 else f"{v:.3f}"
 
+    mspecs = "".join(_sspecs(
+        [[r["m_ra"], r["m_rn"], r["m_ca"], r["m_cn"]] for r in rows]))
     body = "\n".join(
         f"{r['label']} & {{{r['n']}}} & "
         + " & ".join(cell(r[k]) for k in keys) + " \\\\"
         for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{"S[table-format=1.3]" * 10}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{mspecs}{"S[table-format=1.3]" * 7}@{{}}}}
 \\toprule
- & & \\multicolumn{{4}}{{c}}{{Interaction (cond.\\ $\\times$ group)}} &
-   \\multicolumn{{3}}{{c}}{{Condition main effect}} &
-   \\multicolumn{{3}}{{c}}{{Group main effect}} \\\\
-\\cmidrule(lr){{3-6}} \\cmidrule(lr){{7-9}} \\cmidrule(lr){{10-12}}
-Measure & {{$n$}} & {{LMM}} & {{GEE}} & {{$p_U(\\Delta)$}} &
-  {{$p_t(\\Delta)$}} & {{LMM}} & {{$p_W$}} & {{$p_t$}} &
-  {{LMM}} & {{$p_U$}} & {{$p_t$}} \\\\
+ & & \\multicolumn{{4}}{{c}}{{Mean}} &
+   \\multicolumn{{3}}{{c}}{{Interaction}} &
+   \\multicolumn{{2}}{{c}}{{Condition}} &
+   \\multicolumn{{2}}{{c}}{{Group}} \\\\
+\\cmidrule(lr){{3-6}} \\cmidrule(lr){{7-9}} \\cmidrule(lr){{10-11}}
+\\cmidrule(lr){{12-13}}
+ & & \\multicolumn{{2}}{{c}}{{Robot}} &
+   \\multicolumn{{2}}{{c}}{{No-Robot}} & & & & & & & \\\\
+\\cmidrule(lr){{3-4}} \\cmidrule(lr){{5-6}}
+Measure & {{$n$}} & {{ADHD}} & {{No-A.}} & {{ADHD}} & {{No-A.}} &
+  {{LMM}} & {{GEE}} & {{$p_U(\\Delta)$}} & {{LMM}} & {{$p_W$}} &
+  {{LMM}} & {{$p_U$}} \\\\
 \\midrule
 {body}
 \\bottomrule

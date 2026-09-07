@@ -116,9 +116,21 @@ def glmm_rows(groups) -> list[dict]:
             except Exception:
                 pass
 
+        # actual 2x2 cell means (Nicole 07.09): same long frame the
+        # model sees, formatted like the metric's other tables
+        def _cm(g, c2):
+            s = long[(long["pid"].map(groups.get) == g)
+                     & (long["cond"] == c2)]["value"]
+            return (gr._fmt_v(s.mean(), max(dec, 1)).replace("100.0", "100")
+                    if len(s) else "--")
+
         rows.append({
             "label": label,
             "metric": gr._DID_FULL_LABELS.get(label, label),
+            "m_ra": _cm(gr.GROUP_ADHD, "Robot"),
+            "m_rn": _cm(gr.GROUP_CONTROL, "Robot"),
+            "m_ca": _cm(gr.GROUP_ADHD, "Control"),
+            "m_cn": _cm(gr.GROUP_CONTROL, "Control"),
             "n": f"{len(long)}/{long['pid'].nunique()}", "note": note,
             "p_int_lmm": lmm["robot:adhd"], "p_int_gee": p_gee,
             "p_int_u": p_int_u, "p_int_t": p_int_t,
