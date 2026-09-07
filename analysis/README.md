@@ -55,8 +55,16 @@ are synced to Box `study-data/analysis-csv/` by the end-of-day rsync.
 
 `analysis/.venv` (pandas + numpy + scipy; statsmodels only for
 `glmm_comparison.py`, the mixed-model robustness check of the session
-metrics), separate from the study app's frozen venv:
+metrics; pingouin + bambi/PyMC only for `bayes_comparison.py`, the
+paper-facing Bayesian exploration — Bayes factors + hierarchical
+models), separate from the study app's frozen venv:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pandas numpy scipy statsmodels
+python3 -m venv .venv && .venv/bin/pip install pandas numpy scipy statsmodels pingouin bambi
 ```
+
+One-off helper scripts (all run as `.venv/bin/python <script>` from this
+directory): `bayes_comparison.py` (writes output/bayesdoc.tex),
+`glmm_verify.py` (hand-checks the LMM against delta tests),
+`reeng_trace.py` (per-cue trace of the re-engagement analysis),
+`build_data_package.py` (supervisor data package into ~/Downloads).
