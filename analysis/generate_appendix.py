@@ -1434,9 +1434,16 @@ def _interaction_chart(groups: dict[str, str],
 
 def _score_chart(groups: dict[str, str], cond: str, csv_name: str, raw_value,
                  avg_value, threshold: float, trig_kinds: set[str],
-                 trig_color: str) -> str:
+                 trig_color: str, pids: set[int] | None = None,
+                 group_headers: bool = True) -> str:
+    """Score-timeline rows; pids / group_headers mirror _interaction_chart
+    (used by generate_results for the ADHD-only main-report excerpts)."""
     sessions = _sessions(cond, groups)
+    if pids is not None:
+        sessions = [(p, d) for p, d in sessions if p in pids]
     rows, ymax, headers = _layout(sessions, groups)
+    if not group_headers:
+        headers = []
     body = []
     for i, (pid, d, base) in enumerate(rows):
         data = _read_rows(d, csv_name)
@@ -1449,6 +1456,58 @@ def _score_chart(groups: dict[str, str], cond: str, csv_name: str, raw_value,
             annotate01=(i == 0)))
     labeled = [(base, f"P{disp_pid(pid)}") for pid, _, base in rows]
     return _timeline_axis(labeled, ymax, headers, "\n".join(body))
+
+
+def _paired_score_chart(groups: dict[str, str], csv_name: str, raw_value,
+                        avg_value, threshold: float,
+                        trig_kinds: dict[str, set[str]], trig_color: str,
+                        pids: set[int], panel_titles=("Robot condition",
+                                                      "No-robot condition")) -> str:
+    """One row per participant, robot session in the left panel and
+    no-robot session in the right; used by generate_results for the
+    main-report score charts. Participant labels sit on the left panel
+    only; the 0/1 band annotation on the right. A missing session leaves
+    that panel's row empty so the rows stay aligned."""
+    ordered = sorted(p for p in pids if str(p) in groups)
+    ymax = float(len(ordered))
+    rows = [(pid, ymax - (i + 1)) for i, pid in enumerate(ordered)]
+    yticks = ",".join(f"{b + 0.5:.2f}" for _, b in rows)
+    ylab = ",".join("{P" + disp_pid(pid) + "}" for pid, _ in rows)
+    h = TIMELINE_ROW_H_CM * ymax
+    panels = []
+    for k, (cond, title) in enumerate(zip(("Robot", "Control"), panel_titles)):
+        body = []
+        for i, (pid, base) in enumerate(rows):
+            d = _session_csv_dir(pid, cond)
+            if not d:
+                print(f"  WARNING: no {cond} session CSVs for P{pid} — panel row left empty.")
+                continue
+            data = _read_rows(d, csv_name)
+            body.extend(_score_row_body(
+                base, _score_series(data, raw_value),
+                _score_series(data, avg_value), threshold,
+                _event_times(d, trig_kinds[cond]), trig_color,
+                annotate01=(i == 0 and k == 1)))
+        if k == 0:
+            extra = (f"    name=left, ytick={{{yticks}}}, yticklabels={{{ylab}}},\n"
+                     f"    y tick label style={{font=\\small}},")
+        else:
+            extra = ("    at={(left.east)}, anchor=west, xshift=0.9cm,\n"
+                     f"    ytick={{{yticks}}}, yticklabels={{}},")
+        panels.append(f"""  \\begin{{axis}}[
+    width=0.41\\textwidth, height={h:.1f}cm, scale only axis,
+    xmin=0, xmax={SESSION_MAX_MIN:.0f}, ymin=0, ymax={ymax:.2f},
+    xtick={{0,5,...,45}}, xlabel={{Session time (minutes)}},
+    x tick label style={{font=\\small}}, xlabel style={{font=\\small}},
+    title={{{title}}}, title style={{font=\\small\\bfseries, yshift=-3pt}},
+{extra}
+    ytick style={{draw=none}},
+    axis x line*=bottom, axis y line*=left, clip=false,
+  ]
+{chr(10).join(body)}
+  \\end{{axis}}""")
+    return ("\\begin{center}\\begin{tikzpicture}\n" + "\n".join(panels)
+            + "\n\\end{tikzpicture}\\end{center}\n")
 
 
 # ============================================================================

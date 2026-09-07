@@ -1722,6 +1722,72 @@ def chart_interaction_excerpt(post, qtext, groups):
         groups, pids=adhd, group_headers=False)
 
 
+def _score_excerpt(groups, cond: str, which: str) -> str:
+    """ADHD-only, header-less version of one appendix score timeline
+    (engagement or emotion; robot or no-robot session)."""
+    from generate_appendix import _score_chart, _float_or_none, _neg_mass
+    adhd = {int(p) for p, g in groups.items() if g == GROUP_ADHD}
+    sent = cond == "Robot"
+    if which == "engagement":
+        spec = ("engagement.csv", lambda r: _float_or_none(r, "score"),
+                lambda r: _float_or_none(r, "average"), 0.80,
+                {"intervention_engagement_sent" if sent
+                 else "counterfactual_engagement"}, "ApxTrigEng")
+    else:
+        spec = ("emotion.csv", _neg_mass,
+                lambda r: _float_or_none(r, "negative_share"), 0.60,
+                {"intervention_emotion_sent" if sent
+                 else "counterfactual_emotion"}, "ApxTrigEmo")
+    return _score_chart(groups, cond, *spec, pids=adhd, group_headers=False)
+
+
+def _paired_excerpt(groups, which: str) -> str:
+    """ADHD-only robot-vs-no-robot panels of one score signal."""
+    from generate_appendix import _paired_score_chart, _float_or_none, _neg_mass
+    adhd = {int(p) for p, g in groups.items() if g == GROUP_ADHD}
+    if which == "engagement":
+        return _paired_score_chart(
+            groups, "engagement.csv", lambda r: _float_or_none(r, "score"),
+            lambda r: _float_or_none(r, "average"), 0.80,
+            {"Robot": {"intervention_engagement_sent"},
+             "Control": {"counterfactual_engagement"}}, "ApxTrigEng", adhd)
+    return _paired_score_chart(
+        groups, "emotion.csv", _neg_mass,
+        lambda r: _float_or_none(r, "negative_share"), 0.60,
+        {"Robot": {"intervention_emotion_sent"},
+         "Control": {"counterfactual_emotion"}}, "ApxTrigEmo", adhd)
+
+
+def chart_engagement_paired_excerpt(post, qtext, groups):
+    """Main report: engagement scores, ADHD only, robot | no-robot panels."""
+    return "engagement_paired_excerpt", _paired_excerpt(groups, "engagement")
+
+
+def chart_emotion_paired_excerpt(post, qtext, groups):
+    """Main report: emotion scores, ADHD only, robot | no-robot panels."""
+    return "emotion_paired_excerpt", _paired_excerpt(groups, "emotion")
+
+
+def chart_engagement_robot_excerpt(post, qtext, groups):
+    """Main-report excerpt: engagement scores, robot sessions, ADHD only."""
+    return "engagement_robot_excerpt", _score_excerpt(groups, "Robot", "engagement")
+
+
+def chart_emotion_robot_excerpt(post, qtext, groups):
+    """Main-report excerpt: emotion scores, robot sessions, ADHD only."""
+    return "emotion_robot_excerpt", _score_excerpt(groups, "Robot", "emotion")
+
+
+def chart_engagement_control_excerpt(post, qtext, groups):
+    """Main-report excerpt: engagement scores, no-robot sessions, ADHD only."""
+    return "engagement_control_excerpt", _score_excerpt(groups, "Control", "engagement")
+
+
+def chart_emotion_control_excerpt(post, qtext, groups):
+    """Main-report excerpt: emotion scores, no-robot sessions, ADHD only."""
+    return "emotion_control_excerpt", _score_excerpt(groups, "Control", "emotion")
+
+
 def table_suggestions(post, qtext, groups):
     """Thesis version of the ADHD improvement-suggestions table."""
     return "improvement_suggestions", _render_suggestions_table(
@@ -1789,6 +1855,11 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
                   table_metrics_halves_combined_col,
                   table_glmm_comparison, table_glmm_comparison_col,
                   chart_interaction_excerpt,
+                  chart_engagement_robot_excerpt, chart_emotion_robot_excerpt,
+                  chart_engagement_control_excerpt,
+                  chart_emotion_control_excerpt,
+                  chart_engagement_paired_excerpt,
+                  chart_emotion_paired_excerpt,
                   table_feature_stats, table_feature_stats_col,
                   table_suggestions, table_suggestions_col]
 
