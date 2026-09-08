@@ -929,7 +929,7 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
 \\begin{{longtable}}{{@{{}}l@{{\\hspace{{6pt}}\\extracolsep{{\\fill}}}}{'c' * k}cccc@{{}}}}
 \\toprule
 Item & {code_heads} & Mean & Md & SD & $p_U$ \\\\
- & \\multicolumn{{{k + 3}}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
+ & \\multicolumn{{{k + 3}}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,No-ADHD ($n = {n_c}$)}} & \\\\
 \\midrule
 \\endhead
 {body}
@@ -973,7 +973,7 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
 \\begin{{tabular*}}{{\\textwidth}}{{@{{}}l@{{\\extracolsep{{\\fill}}}} ccccc c@{{}}}}
 \\toprule
 Dimension & Min & $Q_1$ & Median & $Q_3$ & Max & $p_U$ \\\\
- & \\multicolumn{{5}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,no-ADHD ($n = {n_c}$)}} & \\\\
+ & \\multicolumn{{5}}{{c}}{{ADHD ($n = {n_a}$)\\,$|$\\,No-ADHD ($n = {n_c}$)}} & \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -2283,7 +2283,7 @@ def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
     legend_box = (f"\\textcolor{{ApxADHD}}{{\\rule{{2ex}}{{1.2ex}}}} ADHD "
                   f"($n = {n_a}$), "
                   f"\\textcolor{{ApxControl}}{{\\rule{{2ex}}{{1.2ex}}}} "
-                  f"no-ADHD ($n = {len(groups) - n_a}$); boxes span the "
+                  f"No-ADHD ($n = {len(groups) - n_a}$); boxes span the "
                   "quartiles, whiskers extend to the furthest value within "
                   "1.5 IQR, dots are outliers.")
     legend_cond = ("\\textcolor{ApxCondRobot}{\\rule{2ex}{1.2ex}} robot "
@@ -2420,7 +2420,7 @@ SUS (0--100) & {sa.mean():.1f} ({sa.std(ddof=1):.1f}) & """
 {{\\footnotesize Medians [$Q_1$; $Q_3$]: ADHD {sa.median():.1f} """
                f"[{sa.quantile(.25):.1f}; {sa.quantile(.75):.1f}] "
                f"(range {sa.min():.1f}--{sa.max():.1f}, $n = {len(sa)}$); "
-               f"no-ADHD {sc.median():.1f} [{sc.quantile(.25):.1f}; "
+               f"No-ADHD {sc.median():.1f} [{sc.quantile(.25):.1f}; "
                f"{sc.quantile(.75):.1f}] (range {sc.min():.1f}--"
                f"{sc.max():.1f}, $n = {len(sc)}$).}}\n\\end{{center}}\n")
 
@@ -2484,7 +2484,7 @@ def build_session_stats(groups: dict[str, str]) -> str:
                             + " \\\\")
         parts = []
         for slabel, scope in (("ADHD", GROUP_ADHD),
-                              ("no-ADHD", GROUP_CONTROL), ("all", None)):
+                              ("No-ADHD", GROUP_CONTROL), ("all", None)):
             rs = (r if scope is None else
                   r[r.index.map(groups.get) == scope])
             cs = (c if scope is None else

@@ -133,7 +133,7 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
                           label_font, title_font, tick_anchors, value_labels,
                           value_font="\\scriptsize", xmax=5.6,
                           span_ext="0.3cm", value_extra_pt=0.0,
-                          adhd_only=False):
+                          adhd_only=False, legend=("No-ADHD", "ADHD")):
     """Render the grouped-bar feature chart at a given size. See
     chart_feature_means / chart_feature_means_col for the two variants."""
     all_keys, all_texts, data_rows, block_spans = data
@@ -199,7 +199,7 @@ def _render_feature_chart(data, *, axis_w, label_w, pitch, bar_pt,
             f"draw={CTRL_COLOR}!70!black] coordinates {{{coords_c}}};\n"
             f"    \\addplot[xbar, fill={ADHD_COLOR}, "
             f"draw={ADHD_COLOR}!70!black] coordinates {{{coords_a}}};\n"
-            f"    \\legend{{No-ADHD, ADHD}}")
+            f"    \\legend{{{legend[0]}, {legend[1]}}}")
     # NO trim axis (see thesis variant note): the full bounding box must
     # include labels so \centering centers the ensemble.
     return f"""\\begin{{tikzpicture}}
@@ -231,11 +231,14 @@ def chart_feature_means(post, qtext, groups):
     """Thesis version: fills the text width, verbal tick anchors, per-bar
     value labels."""
     data = _feature_data(post, qtext, groups)
+    n_a = sum(1 for g in groups.values() if g == GROUP_ADHD)
+    n_c = len(groups) - n_a
     return "feature_means", _render_feature_chart(
         data, axis_w="0.48\\textwidth", label_w="0.42\\textwidth",
+        legend=(f"No-ADHD ($n={n_c}$)", f"ADHD ($n={n_a}$)"),
         pitch="0.75cm", bar_pt=5.5, label_font="\\small",
         title_font="\\small\\bfseries", tick_anchors=True,
-        value_labels=True)
+        value_labels=True, value_font="\\footnotesize", value_extra_pt=1.2)
 
 
 def chart_feature_means_col(post, qtext, groups):
@@ -346,11 +349,13 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep,
     met = {k: session_metrics(d, k[1]) for k, d in sdirs.items()
            if k[0] in groups}
     rows = []
+    n_a = n_c = 0
     for key, label, _, dec in _ROBOT_METRICS:
         if key.startswith("int_"):
             continue
         s_a = _metric_series(met, groups, "Robot", key, GROUP_ADHD)
         s_c = _metric_series(met, groups, "Robot", key, GROUP_CONTROL)
+        n_a, n_c = max(n_a, s_a.dropna().size), max(n_c, s_c.dropna().size)
         # min/max are observed values (metric precision); the derived
         # stats get one decimal so count medians/quartiles keep their .5s.
         stats_ = [(s_a.min(), s_c.min(), dec)]
@@ -382,7 +387,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep,
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
 \\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}{pair_spec}{specs[-1]}@{{}}}}
 \\toprule
- & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD\\,$|$\\,No-ADHD}} & \\\\
+ & \\multicolumn{{{2 * n_stats}}}{{c}}{{ADHD ($n={n_a}$)\\,$|$\\,No-ADHD ($n={n_c}$)}} & \\\\
 \\cmidrule(lr){{2-{2 * n_stats + 1}}}
  & {heads} & {{$p_U$}} \\\\
 \\midrule
@@ -394,7 +399,7 @@ def _render_session_metrics_table(groups, *, quartiles, size, colsep,
 def table_session_metrics(post, qtext, groups):
     """Thesis version: full seven-stat spread including the quartiles."""
     return "session_metrics_robot", _render_session_metrics_table(
-        groups, quartiles=False, size="\\footnotesize", colsep="2pt")
+        groups, quartiles=False, size="\\small", colsep="2pt")
 
 
 def table_session_metrics_col(post, qtext, groups):
@@ -1359,7 +1364,9 @@ def table_metrics_halves_pooled_col(post, qtext, groups):
         groups, size="\\scriptsize", colsep="3pt")
 
 
-def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
+def _render_feature_stats(post, qtext, groups, *, size, colsep,
+                          width=None, rot_font="\\tiny",
+                          rot_breaks=None) -> str:
     """Companion stats table to the feature-means chart. Layout decided
     04.09: rotated block labels on the left (mirroring the chart's
     bracket labels), group ns under the column labels, light-grey rules
@@ -1384,12 +1391,14 @@ def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
         blocks.append((title, items))
     lines = []
     for bi, (title, items) in enumerate(blocks):
-        stack = title.replace(" ", "\\\\")
+        # rot_breaks: explicit line stacks for rotated labels that would
+        # otherwise outgrow their block at the larger thesis font.
+        stack = "\\\\".join((rot_breaks or {}).get(title, title.split()))
         for i, (lbl, ma, mc, pu) in enumerate(items):
             rot = ""
             if i == 0:
                 rot = (f"\\multirow{{{len(items)}}}{{*}}"
-                       f"{{\\rotatebox[origin=c]{{90}}{{\\tiny"
+                       f"{{\\rotatebox[origin=c]{{90}}{{{rot_font}"
                        f"\\bfseries\\shortstack{{{stack}}}}}}}")
             lines.append(f"{rot} & {lbl} & {ma} & {mc} & {pu} \\\\")
         if bi < len(blocks) - 1:
@@ -1397,10 +1406,16 @@ def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
                          "\\arrayrulecolor{black}")
     body = "\n".join(lines)
     na, nc = ns
+    # width=None: natural-width tabular (HRI column); a width stretches
+    # the table to it with the slack spread between the columns.
+    env, wspec, fill = "tabular", "", ""
+    if width:
+        env, wspec = "tabular*", f"{{{width}}}"
+        fill = "@{\\extracolsep{\\fill}}"
     return f"""\\begingroup\\centering{size}
 \\renewcommand{{\\arraystretch}}{{1.2}}%
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular}}{{clS[table-format=1.2]S[table-format=1.2]S[table-format=1.3]}}
+\\begin{{{env}}}{wspec}{{@{{}}cl{fill}S[table-format=1.2]S[table-format=1.2]S[table-format=1.3]@{{}}}}
 \\toprule
  & & \\multicolumn{{2}}{{c}}{{Mean}} & \\\\
 \\cmidrule(lr){{3-4}}
@@ -1409,13 +1424,16 @@ def _render_feature_stats(post, qtext, groups, *, size, colsep) -> str:
 \\midrule
 {body}
 \\bottomrule
-\\end{{tabular}}\\par\\endgroup"""
+\\end{{{env}}}\\par\\endgroup"""
 
 
 def table_feature_stats(post, qtext, groups):
-    """Thesis companion table to the feature-means chart."""
+    """Thesis companion table to the feature-means chart: full text
+    width, \\small like the chart's labels."""
     return "feature_stats", _render_feature_stats(
-        post, qtext, groups, size="\\footnotesize", colsep="4pt")
+        post, qtext, groups, size="\\small", colsep="6pt",
+        width="\\textwidth", rot_font="\\small",
+        rot_breaks={"Overall experience": ["Overall", "ex-", "perience"]})
 
 
 def table_feature_stats_col(post, qtext, groups):
@@ -1670,7 +1688,7 @@ _SUGGESTIONS = [
 
 def _render_suggestions_table(*, cat_w, stmt_w, size,
                               width="\\textwidth",
-                              break_cats=False) -> str:
+                              break_cats=False, n_in_header=True) -> str:
     """Category | Suggestion | Participants (layout decided 04.09):
     the category prints on its first row only; categories are ordered by
     total mention count (desc), suggestions within a category by their
@@ -1699,10 +1717,12 @@ def _render_suggestions_table(*, cat_w, stmt_w, size,
         lines.append("\\arrayrulecolor{black!25}\\cmidrule{1-3}"
                      "\\arrayrulecolor{black}")
     body = "\n".join(lines[:-1])  # drop trailing rule
+    # n in the header for the thesis; the narrow HRI column cannot fit it
+    n_head = f" ($n={_SUGGESTIONS_N_ADHD}$)" if n_in_header else ""
     return f"""\\begingroup\\centering{size}
 \\begin{{tabular*}}{{{width}}}{{@{{}}>{{\\raggedright\\arraybackslash}}p{{{cat_w}}}>{{\\raggedright\\arraybackslash}}p{{{stmt_w}}}@{{\\extracolsep{{\\fill}}}}r@{{}}}}
 \\toprule
-\\textbf{{Category}} & \\textbf{{Suggestion}} & \\textbf{{Participants}} \\\\
+\\textbf{{Category}} & \\textbf{{Suggestion}} & \\textbf{{Participants{n_head}}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1799,7 +1819,8 @@ def table_suggestions_col(post, qtext, groups):
     """HRI column-width version."""
     return "improvement_suggestions_col", _render_suggestions_table(
         cat_w="0.16\\columnwidth", stmt_w="0.60\\columnwidth",
-        size="\\footnotesize", width="\\columnwidth", break_cats=True)
+        size="\\footnotesize", width="\\columnwidth", break_cats=True,
+        n_in_header=False)
 
 
 def chart_feature_means_adhd(post, qtext, groups):
@@ -1810,7 +1831,7 @@ def chart_feature_means_adhd(post, qtext, groups):
         data, axis_w="0.48\\textwidth", label_w="0.42\\textwidth",
         pitch="0.58cm", bar_pt=6.5, label_font="\\small",
         title_font="\\small\\bfseries", tick_anchors=True,
-        value_labels=True, adhd_only=True)
+        value_labels=True, value_font="\\small", adhd_only=True)
 
 
 def chart_feature_means_adhd_col(post, qtext, groups):
