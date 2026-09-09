@@ -1051,7 +1051,7 @@ def _render_within_scopes_table(groups, *, size, colsep) -> str:
                          f"\\cmidrule{{1-{ncols}}}"
                          "\\arrayrulecolor{black}")
         for i, r in enumerate(rows):
-            lab = (f"\\multirow[t]{{{len(rows)}}}{{2.35cm}}"
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{3.1cm}}"
                    f"{{\\raggedright {label}}}" if i == 0 else "")
             lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
     body = "\n".join(lines)
@@ -1127,7 +1127,7 @@ def _render_between_scopes_table(groups, *, size, colsep) -> str:
                          f"\\cmidrule{{1-{ncols}}}"
                          "\\arrayrulecolor{black}")
         for i, r in enumerate(rows):
-            lab = (f"\\multirow[t]{{{len(rows)}}}{{2.35cm}}"
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{3.1cm}}"
                    f"{{\\raggedright {label}}}" if i == 0 else "")
             lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
     body = "\n".join(lines)
@@ -1209,7 +1209,7 @@ def _render_halves_scopes_table(groups, *, size, colsep) -> str:
                          f"\\cmidrule{{1-{ncols}}}"
                          "\\arrayrulecolor{black}")
         for i, r in enumerate(rows):
-            lab = (f"\\multirow[t]{{{len(rows)}}}{{1.9cm}}"
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{3.1cm}}"
                    f"{{\\raggedright {label}}}" if i == 0 else "")
             lines.append(f"{lab} & " + " & ".join(r) + " \\\\")
     body = "\n".join(lines)

@@ -2441,10 +2441,9 @@ def build_session_stats(groups: dict[str, str]) -> str:
     """Descriptive tables + boxplots from the parsed session logs."""
     out = [header_comment(["analysis/logs/P*_csv session logs"])]
     sdirs = session_dirs()
-    gn = gate_note(groups, sdirs)
-    if gn:
-        out.append("\\noindent{\\small\\itshape " + gn +
-                   "}\\par\\vspace{0.6em}\n")
+    # gate note + camera-check prose removed 09.09 (user request: no
+    # generated prose in the session-log appendix; the gate and the
+    # check's rationale live in authored Methodology/caption text)
     # Camera comparability check (simplified 05.09): the sections that
     # duplicated the main-report analyses (session metrics, episodes,
     # landmark recovery, cross-condition, counterfactual replay) were
@@ -2467,12 +2466,17 @@ def build_session_stats(groups: dict[str, str]) -> str:
     ser = pd.Series(vals) if vals else pd.Series(dtype=float)
     signame = {"eng": "Mean engagement score",
                "emo": "Mean neg.-emotion share"}
-    cam_rows, foot_bits = [], []
-    for sig in ("eng", "emo"):
-        cam_rows.append(f"\\multicolumn{{4}}{{l}}{{\\itshape "
-                        f"{signame[sig]}}} \\\\")
+    # Restyled 09.09 (user request): booktabs multirow blocks like the
+    # combined session-metric tables, with the paired-Wilcoxon p values
+    # inside the table instead of a footnote; no prose paragraph.
+    cam_rows = []
+    for bi, sig in enumerate(("eng", "emo")):
         r = ser.get((sig, "Robot"), pd.Series(dtype=float))
         c = ser.get((sig, "Control"), pd.Series(dtype=float))
+        if bi:
+            cam_rows.append("\\arrayrulecolor{black!25}\\cmidrule{1-5}"
+                            "\\arrayrulecolor{black}")
+        block = []
         for cname, s_all in (("Robot (quiet)", r), ("No-Robot", c)):
             cells = []
             for scope in (GROUP_ADHD, GROUP_CONTROL, None):
@@ -2480,54 +2484,42 @@ def build_session_stats(groups: dict[str, str]) -> str:
                      s_all[s_all.index.map(groups.get) == scope])
                 cells.append(f"{s.mean():.3f} ({s.std(ddof=1):.3f})"
                              if len(s) > 1 else "--")
-            cam_rows.append(f"\\;{cname} & " + " & ".join(cells)
-                            + " \\\\")
-        parts = []
-        for slabel, scope in (("ADHD", GROUP_ADHD),
-                              ("No-ADHD", GROUP_CONTROL), ("all", None)):
+            block.append((cname, cells))
+        pcells = []
+        for scope in (GROUP_ADHD, GROUP_CONTROL, None):
             rs = (r if scope is None else
                   r[r.index.map(groups.get) == scope])
             cs = (c if scope is None else
                   c[c.index.map(groups.get) == scope])
             _, p, n = _wilcoxon_cells(rs, cs)
-            parts.append(f"{slabel} {_p_sub(p, 'W')} ($n = {n}$)")
-        foot_bits.append(("engagement" if sig == "eng" else
-                          "neg.-emotion") + ": " + ", ".join(parts))
-    out.append("\\subsection*{Camera comparability check}\n"
-               "\\noindent{\\small The two conditions sense the signals "
-               "through different cameras (robot head camera vs webcam at "
-               "the same position). Session means over the speech-excluded "
-               "timeline (samples during user/robot speech and the "
-               f"{SPEECH_EXCLUSION_BUFFER_S:.0f}\\,s after each segment "
-               "excluded, exact interval subtraction): a robot-vs-no-robot "
-               "offset that persists outside interaction windows would "
-               "indicate an optics/geometry artefact rather than head "
-               "motion during speech. Signal series failing the coverage "
-               "gate (note at the top of this section) are excluded."
-               "}\\par\\vspace{0.4em}\n")
+            pcells.append(f"{_p_val(p)} ({n})")
+        block.append(("$p_W$ ($n$)", pcells))
+        for i, (cname, cells) in enumerate(block):
+            lab = (f"\\multirow[t]{{{len(block)}}}{{*}}"
+                   f"{{{signame[sig]}}}" if i == 0 else "")
+            cam_rows.append(f"{lab} & {cname} & " + " & ".join(cells)
+                            + " \\\\")
+    out.append("\\subsection*{Camera comparability check}\n")
     out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrr}
+\\renewcommand{\\arraystretch}{1.15}%
+\\begin{tabular*}{\\textwidth}{@{}ll@{\\extracolsep{\\fill}}rrr@{}}
 \\toprule
- & ADHD & No-ADHD & All \\\\
- & \\multicolumn{3}{c}{mean (SD)} \\\\
+ & & ADHD & No-ADHD & All \\\\
 \\midrule
-""" + "\n".join(cam_rows) + f"""
+""" + "\n".join(cam_rows) + """
 \\bottomrule
-\\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Paired Wilcoxon, Robot (quiet) vs No-Robot --- """
-               + "; ".join(foot_bits) + ".}\n\\end{center}\n")
+\\end{tabular*}
+\\end{center}
+""")
     return "\n".join(out)
 
 
 def build_session_logs(groups: dict[str, str]) -> str:
     """Five full-page timeline charts from the parsed session logs."""
     out = [header_comment(["analysis/logs/P*_csv session logs"])]
-    gn = gate_note(groups, session_dirs())
-    if gn:
-        out.append("\\noindent{\\small\\itshape " + gn + " The timeline "
-                   "rows below still show all logged raw data (outages "
-                   "appear as line gaps); the exclusion applies to the "
-                   "statistical analyses.}\\par\\vspace{0.6em}\n")
+    # gate-note prose removed 09.09 (user request: no generated prose in
+    # the session-log appendix); the chart legends stay — they explain
+    # how to read the plots, not the results.
 
     def sub(title: str, note: str, chart: str, last: bool = False) -> None:
         out.append(f"\\subsection*{{{esc(title)}}}\n"
