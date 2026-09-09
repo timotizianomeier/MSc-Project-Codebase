@@ -730,7 +730,8 @@ _DID_FULL_LABELS = {
 }
 
 
-def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
+def _render_did_table(groups, *, size, colsep, full_width=False,
+                      stretch=None) -> str:
     """Consolidated factorial summary (layout decided 02.09, user's
     structure): per group a Robot / No-Robot mean pair plus that group's
     paired Wilcoxon p, then a Mann-Whitney block with the ADHD-vs-No-ADHD
@@ -760,19 +761,22 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
         body_rows.append([label] + cells)
     specs = _sspecs([r[1:] for r in body_rows])
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
-    norob = "No-rob."
-    between = "Between ($p_U$)" if full_width else "Between groups ($p_U$)"
+    norob = "No-Robot" if full_width else "No-rob."
+    between = "Between groups ($p_U$)"
     if full_width:
-        # portrait since 08.09 (replaces the GLMM table in Results): fits
-        # \textwidth at footnotesize; was \textheight/sidewaystable 04-08.09
-        env, env_arg = "tabular*", "{\\textwidth}"
+        # landscape (decided 04.09, reaffirmed 09.09 over a portrait
+        # detour): the thesis wraps this in a sidewaystable (rotating
+        # pkg), so the target width is \textheight
+        env, env_arg = "tabular*", "{\\textheight}"
         colspec = ("@{}l@{\\extracolsep{\\fill}}" + "".join(specs) + "@{}")
     else:
         env, env_arg = "tabular", ""
         colspec = "l" + "".join(specs)
+    stretch_cmd = (f"\\renewcommand{{\\arraystretch}}{{{stretch}}}%\n"
+                   if stretch else "")
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{{env}}}{env_arg}{{{colspec}}}
+{stretch_cmd}\\begin{{{env}}}{env_arg}{{{colspec}}}
 \\toprule
  & \\multicolumn{{4}}{{c}}{{ADHD (within)}} &
    \\multicolumn{{4}}{{c}}{{No-ADHD (within)}} &
@@ -789,7 +793,8 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
 def table_metrics_did(post, qtext, groups):
     """Thesis version of the consolidated factorial (DiD) summary."""
     return "session_metrics_did", _render_did_table(
-        groups, size="\\footnotesize", colsep="0.5pt", full_width=True)
+        groups, size="\\normalsize", colsep="2pt", full_width=True,
+        stretch="1.35")
 
 
 def table_metrics_did_col(post, qtext, groups):
