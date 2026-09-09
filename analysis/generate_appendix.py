@@ -2463,23 +2463,28 @@ are over all participants.}
     sa, sc = sus_a.dropna(), sus_c.dropna()
     out.append("\\subsection*{System Usability Scale (SUS) — "
                "Robot Condition}\n")
-    out.append(f"""\\begin{{center}}\\small
-\\begin{{tabular}}{{lrrr}}
+    # full-width layout with the descriptives as columns (09.09, user
+    # request — the footnote form didn't match the other tables)
+    sus_rows = []
+    for gname, s in (("ADHD", sa), ("No-ADHD", sc)):
+        pu = (f"\\multirow{{2}}{{*}}{{{_p_val(sp)}}}"
+              if gname == "ADHD" else "")
+        sus_rows.append(
+            f"{gname} & {len(s)} & {s.mean():.1f} ({s.std(ddof=1):.1f}) & "
+            f"{s.median():.1f} & {s.quantile(.25):.1f} & "
+            f"{s.quantile(.75):.1f} & {s.min():.1f}--{s.max():.1f} & "
+            f"{pu} \\\\")
+    out.append("""\\begin{center}\\small
+\\renewcommand{\\arraystretch}{1.15}%
+\\begin{tabular*}{\\textwidth}{@{}l@{\\extracolsep{\\fill}}rrrrrrr@{}}
 \\toprule
- & ADHD & No-ADHD & $p_U$ \\\\
- & \\multicolumn{{2}}{{c}}{{mean (SD)}} & \\\\
+SUS (0--100) & $n$ & Mean (SD) & Median & $Q_1$ & $Q_3$ & Range & $p_U$ \\\\
 \\midrule
-SUS (0--100) & {sa.mean():.1f} ({sa.std(ddof=1):.1f}) & """
-               f"{sc.mean():.1f} ({sc.std(ddof=1):.1f}) & "
-               f"{_p_val(sp)} \\\\\n"
-               f"""\\bottomrule
-\\end{{tabular}}\\\\[2pt]
-{{\\footnotesize Medians [$Q_1$; $Q_3$]: ADHD {sa.median():.1f} """
-               f"[{sa.quantile(.25):.1f}; {sa.quantile(.75):.1f}] "
-               f"(range {sa.min():.1f}--{sa.max():.1f}, $n = {len(sa)}$); "
-               f"No-ADHD {sc.median():.1f} [{sc.quantile(.25):.1f}; "
-               f"{sc.quantile(.75):.1f}] (range {sc.min():.1f}--"
-               f"{sc.max():.1f}, $n = {len(sc)}$).}}\n\\end{{center}}\n")
+""" + "\n".join(sus_rows) + """
+\\bottomrule
+\\end{tabular*}
+\\end{center}
+""")
 
     # ------------------------------------------------- feature ratings
     # The polished table (rotated block labels, siunitx columns) is
@@ -2526,42 +2531,39 @@ def build_session_stats(groups: dict[str, str]) -> str:
     # Restyled 09.09 (user request): booktabs multirow blocks like the
     # combined session-metric tables, with the paired-Wilcoxon p values
     # inside the table instead of a footnote; no prose paragraph.
+    # Measure | Scope layout (09.09, user request): every column labelled,
+    # explicit n column; means over the PAIRED subset so they agree with
+    # the n and p_W in the same row (same convention as the DiD table).
     cam_rows = []
     for bi, sig in enumerate(("eng", "emo")):
         r = ser.get((sig, "Robot"), pd.Series(dtype=float))
         c = ser.get((sig, "Control"), pd.Series(dtype=float))
+        pair = pd.concat([r, c], axis=1, keys=["robot", "control"]).dropna()
         if bi:
-            cam_rows.append("\\arrayrulecolor{black!25}\\cmidrule{1-5}"
+            cam_rows.append("\\arrayrulecolor{black!25}\\cmidrule{1-6}"
                             "\\arrayrulecolor{black}")
-        block = []
-        for cname, s_all in (("Robot (quiet)", r), ("No-Robot", c)):
-            cells = []
-            for scope in (GROUP_ADHD, GROUP_CONTROL, None):
-                s = (s_all if scope is None else
-                     s_all[s_all.index.map(groups.get) == scope])
-                cells.append(f"{s.mean():.3f} ({s.std(ddof=1):.3f})"
-                             if len(s) > 1 else "--")
-            block.append((cname, cells))
-        pcells = []
-        for scope in (GROUP_ADHD, GROUP_CONTROL, None):
-            rs = (r if scope is None else
-                  r[r.index.map(groups.get) == scope])
-            cs = (c if scope is None else
-                  c[c.index.map(groups.get) == scope])
-            _, p, n = _wilcoxon_cells(rs, cs)
-            pcells.append(f"{_p_val(p)} ({n})")
-        block.append(("$p_W$ ($n$)", pcells))
-        for i, (cname, cells) in enumerate(block):
-            lab = (f"\\multirow[t]{{{len(block)}}}{{*}}"
+        rows = []
+        for scope_lbl, scope in (("ADHD", GROUP_ADHD),
+                                 ("No-ADHD", GROUP_CONTROL), ("All", None)):
+            sub = (pair if scope is None else
+                   pair[pair.index.map(groups.get) == scope])
+            _, p, n = _wilcoxon_cells(sub["robot"], sub["control"])
+            mcells = [f"{sub[k].mean():.3f} ({sub[k].std(ddof=1):.3f})"
+                      if len(sub) > 1 else "--"
+                      for k in ("robot", "control")]
+            rows.append(f"{scope_lbl} & " + " & ".join(mcells) +
+                        f" & {len(sub)} & {_p_val(p)} \\\\")
+        for i, row in enumerate(rows):
+            lab = (f"\\multirow[t]{{{len(rows)}}}{{*}}"
                    f"{{{signame[sig]}}}" if i == 0 else "")
-            cam_rows.append(f"{lab} & {cname} & " + " & ".join(cells)
-                            + " \\\\")
+            cam_rows.append(f"{lab} & {row}")
     out.append("\\subsection*{Camera Comparability Check}\n")
     out.append("""\\begin{center}\\small
 \\renewcommand{\\arraystretch}{1.15}%
-\\begin{tabular*}{\\textwidth}{@{}ll@{\\extracolsep{\\fill}}rrr@{}}
+\\begin{tabular*}{\\textwidth}{@{}ll@{\\extracolsep{\\fill}}rrrr@{}}
 \\toprule
- & & ADHD & No-ADHD & All \\\\
+ & & Robot (quiet) & No-Robot & $n$ & $p_W$ \\\\
+ & & \\multicolumn{2}{c}{mean (SD)} & & \\\\
 \\midrule
 """ + "\n".join(cam_rows) + """
 \\bottomrule
