@@ -747,7 +747,12 @@ def _render_did_table(groups, *, size, colsep, full_width=False,
         cells = []
         for sel in (is_a, ~is_a):
             sub = df.loc[sel]
-            cells += [_scell(_fmt_v(sub[c].dropna().mean(), dd))
+            # means over the PAIRED subset (both conditions present), so
+            # they agree with the within-subjects table and with the p_W
+            # and n reported next to them (fixed 09.09)
+            paired = sub.dropna()
+            cells += [_scell(_fmt_v(paired[c].mean() if len(paired)
+                                    else None, dd))
                       for c in ("Robot", "Control")]
             _, p_w, n_w = _wilcoxon_cells(sub["Robot"], sub["Control"])
             cells += [_scell(str(n_w)), _pcell(p_w)]

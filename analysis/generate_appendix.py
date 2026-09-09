@@ -214,6 +214,44 @@ def esc(text) -> str:
     return s
 
 
+# Title Case for generated headings (thesis convention 09.09): articles,
+# coordinating conjunctions and short prepositions stay lowercase unless
+# first; longer prepositions are capitalised; both halves of hyphenated
+# compounds are capitalised except a joining preposition (Speech-to-Speech);
+# acronyms / words already containing a capital pass through untouched.
+_TC_SMALL = {"a", "an", "the", "and", "or", "but", "nor", "of", "for",
+             "with", "in", "on", "to", "by", "at", "per", "vs", "as"}
+
+
+def _tc_word(w: str, first: bool) -> str:
+    if not w:
+        return w
+    if not w[0].isalpha():  # step over leading punctuation, e.g. "(robot"
+        for i, ch in enumerate(w):
+            if ch.isalpha():
+                return w[:i] + _tc_word(w[i:], first)
+        return w
+    if "-" in w:  # before the capital guard: Open-ended -> Open-Ended
+        parts = w.split("-")
+        return "-".join(p if (i and p in _TC_SMALL)
+                        else _tc_word(p, first if i == 0 else False)
+                        for i, p in enumerate(parts))
+    if any(c.isupper() for c in w):
+        return w  # acronym or already-capitalised
+    if not first and w.rstrip(".,:;)").lower() in _TC_SMALL:
+        return w
+    return w[0].upper() + w[1:]
+
+
+def title_case(s: str) -> str:
+    toks, out, first = s.split(" "), [], True
+    for tok in toks:
+        out.append(_tc_word(tok, first))
+        # a segment restarts after an em dash or colon
+        first = tok in ("—", "---") or tok.endswith(":")
+    return " ".join(out)
+
+
 def normalise_pid(raw) -> str | None:
     """'0001' -> '1'; reject anything non-numeric (test rows, blanks)."""
     if raw is None or (isinstance(raw, float) and np.isnan(raw)):
@@ -922,7 +960,7 @@ def likert_summary_table(df, qtext, groups, prefix, n_items, title,
     note = (f"\\noindent{{\\small Coding: {scale_note}.}}"
             f"\\par\\vspace{{0.4em}}\n" if scale_note else "")
     body = "\n".join(rows)
-    return f"""\\subsection*{{{esc(title)}}}
+    return f"""\\subsection*{{{esc(title_case(title))}}}
 {note}{{\\small
 \\setlength{{\\tabcolsep}}{{3.2pt}}
 \\setlength{{\\LTleft}}{{0pt}}\\setlength{{\\LTright}}{{0pt}}
@@ -966,7 +1004,7 @@ def slider_summary_table(df, qtext, groups, cols, title) -> str:
         rows.append(f"{shade}{dim} & {cells} & {p_cell} \\\\")
     note = "0--100 scale."
     body = "\n".join(rows)
-    return f"""\\subsection*{{{esc(title)}}}
+    return f"""\\subsection*{{{esc(title_case(title))}}}
 \\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}
 \\noindent{{\\small
 \\setlength{{\\tabcolsep}}{{4pt}}%
@@ -988,7 +1026,7 @@ def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
     by per-question summary-statistics tables (ranks 1..k). Pagination and
     label placement are delegated to `pag` (see Paginator)."""
     pag = pag or Paginator()
-    parts = [pag.heading() + f"\\subsection*{{{esc(title)}}}\n"]
+    parts = [pag.heading() + f"\\subsection*{{{esc(title_case(title))}}}\n"]
     stats_parts = []
     items = []
     for i in range(1, n_items + 1):
@@ -1023,7 +1061,7 @@ def likert_instrument(df, qtext, groups, prefix, n_items, title, hint=None,
                 vals, f"Q{i} — {strip_stem(qtext.get(col, col))} "
                       f"(responses coded {rng})"))
     if stats_parts:
-        parts.append("\\subsubsection*{Summary statistics}\n")
+        parts.append("\\subsubsection*{Summary Statistics}\n")
         parts.extend(stats_parts)
         pag.force_break()
     return "\n".join(parts)
@@ -1035,7 +1073,7 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False,
     the same Paginator-driven flow and label placement as the likert
     instruments (labels = bin edges 0..100 in steps of ten)."""
     pag = pag or Paginator()
-    parts = [pag.heading() + f"\\subsection*{{{esc(title)}}}\n"]
+    parts = [pag.heading() + f"\\subsection*{{{esc(title_case(title))}}}\n"]
     stats_parts = []
     present = [c for c in cols if c in df.columns]
     for c in cols:
@@ -1062,7 +1100,7 @@ def slider_instrument(df, qtext, groups, cols, title, with_stats=False,
                 vals[g] = pd.to_numeric(df[df["PID"].isin(pids)][col], errors="coerce")
             stats_parts.append(summary_stats_table(vals, f"{dim} (0--100)"))
     if stats_parts:
-        parts.append("\\subsubsection*{Summary statistics}\n")
+        parts.append("\\subsubsection*{Summary Statistics}\n")
         parts.extend(stats_parts)
         pag.force_break()
     return "\n".join(parts)
@@ -1074,7 +1112,7 @@ def open_ended_tables(df, qtext, groups, cols, title):
     Each question gets a short bold subheader from OE_HEADERS (skipped if
     it would just repeat the section title), with the full question text
     below it."""
-    parts = [f"\\subsection*{{{esc(title)}}}\n"]
+    parts = [f"\\subsection*{{{esc(title_case(title))}}}\n"]
     wrote_any = False
     for col in cols:
         if col not in df.columns:
@@ -1139,11 +1177,11 @@ def build_pre_study(pre, qtext, groups, src):
         g = groups.get(r["PID"])
         if g and isinstance(r.get("PRE_DEGREE"), str) and r["PRE_DEGREE"].strip():
             deg[g].append((r["PID"], r["PRE_DEGREE"].strip()))
-    out.append("\\subsection*{Degree programme}\n")
+    out.append("\\subsection*{Degree Programme}\n")
     out.append(text_answers_table(deg, "Degree programme (verbatim)."))
 
     # LEVEL
-    out.append("\\subsection*{Level of study}\n")
+    out.append("\\subsection*{Level of Study}\n")
     cats = category_order(observed_values(pre, "PRE_LEVEL"), "LEVEL")
     out.append(category_table(pre, "PRE_LEVEL", groups, cats))
 
@@ -1153,12 +1191,12 @@ def build_pre_study(pre, qtext, groups, src):
         g = groups.get(r["PID"])
         if g and isinstance(r.get("PRE_FIELD"), str) and r["PRE_FIELD"].strip():
             fld[g].append((r["PID"], r["PRE_FIELD"].strip()))
-    out.append("\\subsection*{Field of study}\n")
+    out.append("\\subsection*{Field of Study}\n")
     out.append(text_answers_table(fld, "Field of study (verbatim)."))
 
     # DIAGNOSIS + SUPPORT (simple count tables)
-    for col, ttl in [("PRE_ADHD_DX", "Formal ADHD diagnosis"),
-                     ("PRE_ADHD_SUPPORT", "Support / accommodations")]:
+    for col, ttl in [("PRE_ADHD_DX", "Formal ADHD Diagnosis"),
+                     ("PRE_ADHD_SUPPORT", "Support / Accommodations")]:
         out.append(f"\\subsection*{{{ttl}}}\n")
         cats = category_order(observed_values(pre, col), "YESNO")
         out.append(category_table(pre, col, groups, cats))
@@ -1166,7 +1204,7 @@ def build_pre_study(pre, qtext, groups, src):
     # Demographics above fill part of the page -> chart instruments start fresh.
     out.append("\\newpage\n")
     out.append(likert_summary_table(pre, qtext, groups, "PRE_NARS_", 14,
-                                    "Negative Attitudes towards Robots Scale (NARS)",
+                                    "Negative Attitudes Towards Robots Scale (NARS)",
                                     hint="LIKERT5"))
     out.append(likert_summary_table(pre, qtext, groups, "PRE_ASRS_", 18,
                                     "Adult ADHD Self-Report Scale (ASRS)",
@@ -1193,7 +1231,7 @@ def build_post_robot(post, qtext, groups, src):
     out = [header_comment([src])]
     pag = Paginator()
     out.append(likert_summary_table(post, qtext, groups, "POST_NARS_", 14,
-                                    "Negative Attitudes towards Robots Scale (NARS)",
+                                    "Negative Attitudes Towards Robots Scale (NARS)",
                                     hint="LIKERT5"))
     out.append(likert_summary_table(post, qtext, groups, "POST_SUS_", 10,
                                     "System Usability Scale (SUS)", hint="LIKERT5"))
@@ -2314,7 +2352,7 @@ def build_instrument_stats(pre: pd.DataFrame, ctrl: pd.DataFrame,
                         f" & {mc.mean():.2f} ({mc.std(ddof=1):.2f}) & "
                         f"{_p_val(p)} \\\\")
     out.append("\\subsection*{Executive Skills Questionnaire Revised "
-               "(ESQ-R) — pre-study}\n"
+               "(ESQ-R) — Pre-Study}\n"
                "\\noindent{\\small Coded 0--3 (official 4-point response "
                "scale).}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
@@ -2350,8 +2388,17 @@ Scale & ADHD & No-ADHD & $p_U$ \\\\
         nars_rows.append(f"{label} & {sa.mean():.2f} ({sa.std(ddof=1):.2f}) & "
                          f"{sc.mean():.2f} ({sc.std(ddof=1):.2f}) & "
                          f"{_p_val(p)} \\\\")
-    out.append("\\subsection*{Negative Attitudes towards Robots Scale "
-               "(NARS) — pre vs post}\n"
+    # per-group paired tests added 09.09: the Results prose cites them,
+    # so the appendix must carry them (verification-agent finding)
+    pw_cells = []
+    for sel in (both[both.index.isin(pids_a)],
+                both[~both.index.isin(pids_a)]):
+        _, p, n = _wilcoxon_cells(sel["pre"], sel["post"])
+        pw_cells.append(f"{_p_val(p)} ({n})")
+    nars_rows.append("$p_W$ pre vs post ($n$) & " +
+                     " & ".join(pw_cells) + " & \\\\")
+    out.append("\\subsection*{Negative Attitudes Towards Robots Scale "
+               "(NARS) — Pre vs Post}\n"
                "\\noindent{\\small Mean item score over the 14 items "
                "(1--5, items 3, 5, 6 reverse-coded; higher = more negative "
                "attitude).}\\par\\vspace{0.4em}\n")
@@ -2369,33 +2416,43 @@ Scale & ADHD & No-ADHD & $p_U$ \\\\
                "\\end{center}\n")
 
     # ------------------------------------------------------------ TLX
+    # per-group columns added 09.09: the Results prose cites the
+    # per-group frustration tests, so the appendix must carry them
     tlx_rows = []
     for dim in TLX_DIMS:
         col = f"POST_TLX_{dim}_1"
         r = post.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         c = ctrl.set_index("PID")[col].pipe(pd.to_numeric, errors="coerce")
         pair = pd.concat([r, c], axis=1, keys=["robot", "control"]).dropna()
-        _, p, n = _wilcoxon_cells(pair["robot"], pair["control"])
+        pcells = []
+        for sub in (pair, pair[pair.index.isin(pids_a)],
+                    pair[~pair.index.isin(pids_a)]):
+            _, p, _ = _wilcoxon_cells(sub["robot"], sub["control"])
+            pcells.append(_p_val(p))
+        n = len(pair)
         tlx_rows.append(
             f"{dim.capitalize()} & "
             f"{pair['robot'].mean():.1f} ({pair['robot'].std(ddof=1):.1f}) & "
             f"{pair['control'].mean():.1f} ({pair['control'].std(ddof=1):.1f})"
-            f" & {n} & {_p_val(p)} \\\\")
-    out.append("\\subsection*{NASA Task Load Index (TLX) — workload "
-               "by condition}\n"
+            f" & {n} & " + " & ".join(pcells) + " \\\\")
+    out.append("\\subsection*{NASA Task Load Index (TLX) — Workload "
+               "by Condition}\n"
                "\\noindent{\\small 0--100 sliders, paired within-subject "
                "(Wilcoxon signed-rank); six uncorrected comparisons — "
                "apply multiple-testing caution when reporting."
                "}\\par\\vspace{0.4em}\n")
     out.append("""\\begin{center}\\small
-\\begin{tabular}{lrrrr}
+\\begin{tabular}{lrrrrrr}
 \\toprule
-Dimension & Robot & No-Robot & $n$ & $p_W$ \\\\
- & \\multicolumn{2}{c}{mean (SD)} & & \\\\
+Dimension & Robot & No-Robot & $n$ & \\multicolumn{3}{c}{$p_W$} \\\\
+\\cmidrule(lr){5-7}
+ & \\multicolumn{2}{c}{mean (SD)} & & All & ADHD & No-ADHD \\\\
 \\midrule
 """ + "\n".join(tlx_rows) + """
 \\bottomrule
-\\end{tabular}
+\\end{tabular}\\\\[2pt]
+{\\footnotesize Per-group tests: ADHD $n = 12$, No-ADHD $n = 10$; means
+are over all participants.}
 \\end{center}
 """)
 
@@ -2405,7 +2462,7 @@ Dimension & Robot & No-Robot & $n$ & $p_W$ \\\\
     _, sp = _mwu_cells(sus_a, sus_c)
     sa, sc = sus_a.dropna(), sus_c.dropna()
     out.append("\\subsection*{System Usability Scale (SUS) — "
-               "robot condition}\n")
+               "Robot Condition}\n")
     out.append(f"""\\begin{{center}}\\small
 \\begin{{tabular}}{{lrrr}}
 \\toprule
@@ -2429,7 +2486,7 @@ SUS (0--100) & {sa.mean():.1f} ({sa.std(ddof=1):.1f}) & """
     # generated by generate_results.py as results-charts/feature_stats.tex
     # and synced to the thesis repo; reference it instead of maintaining a
     # duplicate here (decided 05.09).
-    out.append("\\subsection*{Feature ratings (robot condition, 1--5)}\n"
+    out.append("\\subsection*{Feature Ratings (Robot Condition, 1--5)}\n"
                "\\noindent{\\small Group means with Mann-Whitney U per item "
                "(15 uncorrected exploratory tests)."
                "}\\par\\vspace{0.4em}\n")
@@ -2499,7 +2556,7 @@ def build_session_stats(groups: dict[str, str]) -> str:
                    f"{{{signame[sig]}}}" if i == 0 else "")
             cam_rows.append(f"{lab} & {cname} & " + " & ".join(cells)
                             + " \\\\")
-    out.append("\\subsection*{Camera comparability check}\n")
+    out.append("\\subsection*{Camera Comparability Check}\n")
     out.append("""\\begin{center}\\small
 \\renewcommand{\\arraystretch}{1.15}%
 \\begin{tabular*}{\\textwidth}{@{}ll@{\\extracolsep{\\fill}}rrr@{}}
@@ -2522,7 +2579,7 @@ def build_session_logs(groups: dict[str, str]) -> str:
     # how to read the plots, not the results.
 
     def sub(title: str, note: str, chart: str, last: bool = False) -> None:
-        out.append(f"\\subsection*{{{esc(title)}}}\n"
+        out.append(f"\\subsection*{{{esc(title_case(title))}}}\n"
                    f"\\noindent{{\\small {note}}}\\par\\vspace{{0.4em}}\n"
                    + chart + ("" if last else "\n\\newpage\n"))
 
