@@ -760,11 +760,12 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
         body_rows.append([label] + cells)
     specs = _sspecs([r[1:] for r in body_rows])
     body = "\n".join(" & ".join(r) + " \\\\" for r in body_rows)
-    norob = "No-Robot" if full_width else "No-rob."
+    norob = "No-rob."
+    between = "Between ($p_U$)" if full_width else "Between groups ($p_U$)"
     if full_width:
-        # landscape (decided 04.09): the thesis wraps this in a
-        # sidewaystable (rotating pkg), so the target width is \textheight
-        env, env_arg = "tabular*", "{\\textheight}"
+        # portrait since 08.09 (replaces the GLMM table in Results): fits
+        # \textwidth at footnotesize; was \textheight/sidewaystable 04-08.09
+        env, env_arg = "tabular*", "{\\textwidth}"
         colspec = ("@{}l@{\\extracolsep{\\fill}}" + "".join(specs) + "@{}")
     else:
         env, env_arg = "tabular", ""
@@ -775,7 +776,7 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
 \\toprule
  & \\multicolumn{{4}}{{c}}{{ADHD (within)}} &
    \\multicolumn{{4}}{{c}}{{No-ADHD (within)}} &
-   \\multicolumn{{3}}{{c}}{{Between groups ($p_U$)}} \\\\
+   \\multicolumn{{3}}{{c}}{{{between}}} \\\\
 \\cmidrule(lr){{2-5}} \\cmidrule(lr){{6-9}} \\cmidrule(lr){{10-12}}
  & {_sheads(["Robot", norob, "$n$", "$p_W$", "Robot", norob,
              "$n$", "$p_W$", "Robot", norob, "$\\Delta$"])} \\\\
@@ -788,7 +789,7 @@ def _render_did_table(groups, *, size, colsep, full_width=False) -> str:
 def table_metrics_did(post, qtext, groups):
     """Thesis version of the consolidated factorial (DiD) summary."""
     return "session_metrics_did", _render_did_table(
-        groups, size="\\footnotesize", colsep="1pt", full_width=True)
+        groups, size="\\footnotesize", colsep="0.5pt", full_width=True)
 
 
 def table_metrics_did_col(post, qtext, groups):
