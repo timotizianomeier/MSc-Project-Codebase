@@ -234,3 +234,33 @@ async def test_sensing_observer_receives_engagement_payload_and_unavailable(monk
     assert [p["kind"] for p in seen] == ["engagement", "engagement"]
     assert seen[0]["score"] == 0.55 and seen[0]["error"] is None and "gate" in seen[0]
     assert seen[1]["score"] is None and seen[1]["error"]
+
+
+# ---------------------------------------------------------- manual trigger
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["emotion", "engagement"])
+async def test_manual_intervention_sends_and_marks_cooldown(
+    kind: str, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The /demo button goes through the unchanged _send_* path and consumes the cooldown."""
+    handler = _make_handler()
+    sends = {"emotion": AsyncMock(), "engagement": AsyncMock()}
+    marks = {"emotion": MagicMock(), "engagement": MagicMock()}
+    monkeypatch.setattr(handler, "_send_emotion_intervention", sends["emotion"])
+    monkeypatch.setattr(handler, "_send_engagement_intervention", sends["engagement"])
+    monkeypatch.setattr(handler._emotion_monitor, "mark_intervened", marks["emotion"])
+    monkeypatch.setattr(handler._engagement_monitor, "mark_intervened", marks["engagement"])
+    handler._response_done_event.clear()  # robot mid-turn
+
+    with caplog.at_level("INFO"):
+        speaking = await handler.trigger_manual_intervention(kind)
+
+    assert speaking is True
+    other = "engagement" if kind == "emotion" else "emotion"
+    sends[kind].assert_awaited_once()
+    sends[other].assert_not_awaited()
+    marks[kind].assert_called_once()
+    marks[other].assert_not_called()
+    assert any(r.getMessage() == f"DEMO: manual {kind} intervention triggered from the demo page" for r in caplog.records)

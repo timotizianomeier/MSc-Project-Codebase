@@ -673,6 +673,36 @@ class LocalStream:
                 "duration_minutes": config.SESSION_DURATION_MINUTES,
             }
 
+        # ── Live-demo control page (/demo) ───────────────────────────────
+        @rpc.method("demo.status")  # type: ignore[untyped-decorator]
+        def _rpc_demo_status(_params: dict[str, object]) -> dict[str, object]:
+            deps = getattr(self.handler, "deps", None)
+            return {
+                "demo_mode": config.DEMO_MODE,
+                "control_mode": config.CONTROL_MODE,
+                "camera_enabled": bool(getattr(deps, "camera_enabled", False)),
+                "emotion_enabled": bool(getattr(deps, "emotion_enabled", False)),
+                "engagement_enabled": bool(getattr(deps, "engagement_enabled", False)),
+                "session_active": bool(self.handler.session_gate_open()),
+                "backend_connected": bool(self.handler._is_connected()),
+                "mic_muted": self._mic_muted,
+            }
+
+        @rpc.method("demo.intervene")  # type: ignore[untyped-decorator]
+        async def _rpc_demo_intervene(params: dict[str, object]) -> dict[str, object]:
+            kind = str(params.get("kind", "")).strip().lower()
+            if kind not in {"emotion", "engagement"}:
+                raise JsonRpcError("kind must be 'emotion' or 'engagement'", reason="invalid_params", code=-32602)
+            if not config.DEMO_MODE:
+                raise JsonRpcError("demo mode is off", reason="demo_disabled")
+            if not self.handler.session_gate_open():
+                raise JsonRpcError("session not started", reason="session_not_started")
+            if not self.handler._is_connected():
+                raise JsonRpcError("no active session", reason="not_running")
+            # Touches the realtime connection -> must run on the app loop.
+            speaking = await self._on_app_loop(self.handler.trigger_manual_intervention(kind))
+            return {"ok": True, "kind": kind, "queued_behind_speech": bool(speaking)}
+
         @rpc.method("backend.config")  # type: ignore[untyped-decorator]
         def _rpc_backend_config(params: dict[str, object]) -> dict[str, object]:
             hf_selection = get_hf_connection_selection()

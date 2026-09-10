@@ -882,3 +882,65 @@ def test_sensing_observer_is_wired_and_broadcasts_demo_sensing() -> None:
     stream._rpc.broadcast_threadsafe = MagicMock()
     stream._dispatch_sensing({"kind": "emotion", "emotion": "sad"})
     stream._rpc.broadcast_threadsafe.assert_called_once_with("demo.sensing", {"kind": "emotion", "emotion": "sad"})
+
+
+def _demo_stream() -> tuple[FastAPI, LocalStream, MagicMock]:
+    app = FastAPI()
+    robot = SimpleNamespace(media=SimpleNamespace(audio=None, backend=None))
+    handler = MagicMock()
+    handler.trigger_manual_intervention = AsyncMock(return_value=False)
+    stream = LocalStream(handler, robot, settings_app=app)
+    stream._init_settings_ui_if_needed()
+    return app, stream, handler
+
+
+def test_demo_intervene_requires_demo_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Manual interventions are refused unless the app was launched in demo mode."""
+    app, _, handler = _demo_stream()
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+
+    assert _rpc_call(app, "demo.intervene", {"kind": "emotion"})["error"]["data"]["reason"] == "demo_disabled"
+    handler.trigger_manual_intervention.assert_not_awaited()
+
+
+def test_demo_intervene_rejects_unknown_kind(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the two study signals can be fired."""
+    app, _, _ = _demo_stream()
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+
+    assert _rpc_call(app, "demo.intervene", {"kind": "boredom"})["error"]["data"]["reason"] == "invalid_params"
+
+
+def test_demo_intervene_requires_started_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same gate as conversation.context: nothing fires before the participant pressed Start."""
+    app, _, handler = _demo_stream()
+    handler.session_gate_open.return_value = False
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+
+    assert _rpc_call(app, "demo.intervene", {"kind": "emotion"})["error"]["data"]["reason"] == "session_not_started"
+
+
+def test_demo_intervene_fires_through_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A valid request reaches trigger_manual_intervention with the kind and reports the queue state."""
+    app, _, handler = _demo_stream()
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    handler.trigger_manual_intervention.return_value = True
+
+    result = _rpc_call(app, "demo.intervene", {"kind": "Engagement"})["result"]
+
+    handler.trigger_manual_intervention.assert_awaited_once_with("engagement")
+    assert result == {"ok": True, "kind": "engagement", "queued_behind_speech": True}
+
+
+def test_demo_status_reports_mode_and_sensors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The page confirms demo mode + sensors are on before the participant sits down."""
+    app, _, handler = _demo_stream()
+    handler.deps = SimpleNamespace(camera_enabled=True, emotion_enabled=True, engagement_enabled=False)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    monkeypatch.setattr(config, "CONTROL_MODE", False)
+
+    status = _rpc_call(app, "demo.status")["result"]
+
+    assert status["demo_mode"] is True and status["control_mode"] is False
+    assert status["emotion_enabled"] is True and status["engagement_enabled"] is False
+    assert status["mic_muted"] is False

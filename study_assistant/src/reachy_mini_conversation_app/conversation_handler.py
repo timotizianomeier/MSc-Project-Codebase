@@ -169,6 +169,13 @@ class ConversationHandler(AsyncStreamHandler, ABC):
         """
         return False
 
+    async def trigger_manual_intervention(self, kind: str) -> bool:
+        """Fire a `kind` intervention on cue (live-demo page); returns True if the robot was mid-turn.
+
+        Default: no intervention concept, nothing to fire.
+        """
+        return False
+
     @abstractmethod
     async def get_available_voices(self) -> list[str]:
         """Return voices available for the active backend."""

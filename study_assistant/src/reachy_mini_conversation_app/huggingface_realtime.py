@@ -670,6 +670,26 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         except Exception as e:
             logger.warning("Failed to queue engagement intervention prompt: %s", e)
 
+    async def trigger_manual_intervention(self, kind: str) -> bool:
+        """Fire an intervention on cue from the /demo page; returns True if the robot was mid-turn.
+
+        Goes through the unchanged _send_* path so the injected prompt is
+        byte-identical to an automatic one, and consumes the cooldown so the
+        page's gate display stays coherent afterwards. The "DEMO: manual ..."
+        line is what distinguishes it in the log. If the robot is speaking the
+        response is queued (see _response_sender_loop), not barged in.
+        """
+        speaking = not self._response_done_event.is_set()
+        logger.info("DEMO: manual %s intervention triggered from the demo page", kind)
+        now = time.monotonic()
+        if kind == "emotion":
+            await self._send_emotion_intervention()
+            self._emotion_monitor.mark_intervened(now)
+        else:
+            await self._send_engagement_intervention()
+            self._engagement_monitor.mark_intervened(now)
+        return speaking
+
     async def send_user_text(self, text: str) -> None:
         """Inject typed task context into the live conversation and prompt a brief acknowledgement."""
         # Newlines escaped so multi-line pastes land on ONE log line — the log is
