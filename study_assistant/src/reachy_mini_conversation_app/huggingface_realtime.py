@@ -78,10 +78,10 @@ _RESPONSE_REJECTION_RETRY_DELAY: Final[float] = 0.5
 _EMOTION_POLL_INTERVAL_S: Final[float] = 5.0
 _ENGAGEMENT_FRAME_INTERVAL_S: Final[float] = 0.5
 _ENGAGEMENT_SCORE_EVERY_TICKS: Final[int] = 10
-# Live-demo page thumbnails: 320 px @ q60 is ~20-30 KB of base64 once per 5 s —
-# readable on a projector, negligible on the websocket.
-_DEMO_FRAME_WIDTH: Final[int] = 320
-_DEMO_JPEG_QUALITY: Final[int] = 60
+# Live-demo page frames: 640 px @ q80 is ~80-120 KB of base64 once per 5 s —
+# crisp on a projector, still negligible on a LAN websocket.
+_DEMO_FRAME_WIDTH: Final[int] = 640
+_DEMO_JPEG_QUALITY: Final[int] = 80
 
 
 def _encode_demo_frame(frame: NDArray[np.uint8]) -> str | None:
