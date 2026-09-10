@@ -65,6 +65,8 @@ python3 -m venv .venv && .venv/bin/pip install pandas numpy scipy statsmodels pi
 
 One-off helper scripts (all run as `.venv/bin/python <script>` from this
 directory): `bayes_comparison.py` (writes output/bayesdoc.tex),
+`bayes_followup.py` (ROPE, prior sensitivity, poll-level models, Bayesian
+TLX; writes output/bayes_followup.tex, ~13 min of sampling),
 `glmm_verify.py` (hand-checks the LMM against delta tests),
 `reeng_trace.py` (per-cue trace of the re-engagement analysis),
 `build_data_package.py` (supervisor data package into ~/Downloads).
