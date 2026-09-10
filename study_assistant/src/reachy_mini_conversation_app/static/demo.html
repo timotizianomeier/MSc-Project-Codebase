@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Reachy · Demo control</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <style>
+      /* Page-local layout only; look-and-feel comes from style.css. Presenter-facing:
+         one wide column so it reads from across a room on a projector. */
+      .demo {
+        max-width: 72rem;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem 3rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .demo__header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .demo__header h1 {
+        margin: 0;
+      }
+      .demo__banner {
+        padding: 0.6rem 1rem;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        background: var(--accent-soft);
+      }
+      .demo__banner.is-error {
+        background: var(--danger);
+        color: #fff;
+      }
+      .demo__controls {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .demo__controls .btn {
+        padding: 0.8rem 1.4rem;
+        font-size: 1.05rem;
+      }
+      .demo__action-status {
+        margin: 0;
+        min-height: 1.4rem;
+        opacity: 0.85;
+      }
+      .demo__grid {
+        display: grid;
+        grid-template-columns: minmax(20rem, 1.2fr) minmax(18rem, 1fr);
+        gap: 1rem;
+        align-items: start;
+      }
+      @media (max-width: 52rem) {
+        .demo__grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .demo__snapshot {
+        position: relative;
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        aspect-ratio: 4 / 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .demo__snapshot img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .demo__snapshot-caption {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 0.5rem 0.9rem;
+        background: rgba(0, 0, 0, 0.55);
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+        font-size: 1.05rem;
+      }
+      .demo__badge {
+        position: absolute;
+        top: 0.7rem;
+        left: 0.7rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: var(--radius-sm);
+        background: var(--warn);
+        color: #111;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .demo__cards {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .card {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.9rem 1rem;
+      }
+      .card h2 {
+        margin: 0 0 0.4rem;
+        font-size: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      .card__big {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+      .card__sub {
+        color: var(--text-soft);
+        font-size: 0.9rem;
+      }
+      .bar {
+        position: relative;
+        height: 0.6rem;
+        margin: 0.5rem 0 0.35rem;
+        border-radius: 999px;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        overflow: visible;
+      }
+      .bar__fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--success);
+        transition: width var(--transition);
+      }
+      .bar__fill.is-bad {
+        background: var(--danger);
+      }
+      .bar__marker {
+        position: absolute;
+        top: -0.35rem;
+        bottom: -0.35rem;
+        width: 2px;
+        background: var(--text);
+      }
+      .gate {
+        list-style: none;
+        margin: 0.5rem 0 0;
+        padding: 0;
+        font-size: 0.9rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.15rem 0.8rem;
+      }
+      .gate li::before {
+        content: "✗ ";
+        color: var(--danger);
+      }
+      .gate li.ok::before {
+        content: "✓ ";
+        color: var(--success);
+      }
+      .gate li.na {
+        opacity: 0.45;
+      }
+      .gate li.na::before {
+        content: "· ";
+        color: var(--text-muted);
+      }
+      .card--fire {
+        border-color: var(--warn);
+        box-shadow: 0 0 0 2px var(--warn);
+      }
+      .demo__strip {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+      }
+      .demo__thumb {
+        flex: 0 0 auto;
+        width: 8.5rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        background: var(--bg-elev);
+        cursor: pointer;
+        font-size: 0.75rem;
+      }
+      .demo__thumb img {
+        width: 100%;
+        display: block;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+      }
+      .demo__thumb div {
+        padding: 0.25rem 0.4rem;
+        display: flex;
+        justify-content: space-between;
+      }
+      .demo__events {
+        margin: 0;
+        padding-left: 1.2rem;
+        font-size: 0.9rem;
+        max-height: 9rem;
+        overflow-y: auto;
+      }
+      .demo__events li {
+        margin: 0.15rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="demo">
+      <div class="demo__header">
+        <h1>Demo control</h1>
+        <div class="demo__banner" id="mode-banner">Connecting…</div>
+      </div>
+
+      <div class="demo__controls">
+        <button type="button" class="btn btn--danger" id="mute">Mute mic</button>
+        <button type="button" class="btn btn--primary" id="fire-engagement">Trigger engagement intervention</button>
+        <button type="button" class="btn btn--primary" id="fire-emotion">Trigger emotion intervention</button>
+      </div>
+      <p class="demo__action-status" id="action-status" role="status"></p>
+
+      <div class="demo__grid">
+        <div class="demo__snapshot">
+          <img id="snapshot" alt="" hidden />
+          <span class="demo__badge" id="fire-badge" hidden>WOULD FIRE — suppressed (demo)</span>
+          <div class="demo__snapshot-caption">
+            <span id="snap-emotion">Waiting for the first frame…</span>
+            <span id="snap-time"></span>
+          </div>
+        </div>
+
+        <div class="demo__cards">
+          <section class="card" id="card-engagement">
+            <h2>Engagement <span class="card__sub" id="eng-updated"></span></h2>
+            <div class="card__big" id="eng-score">–</div>
+            <div class="card__sub" id="eng-sub">30 s average – · threshold –</div>
+            <div class="bar">
+              <div class="bar__fill" id="eng-fill" style="width: 0%"></div>
+              <div class="bar__marker" id="eng-marker" style="left: 0%"></div>
+            </div>
+            <ul class="gate" id="eng-gate"></ul>
+          </section>
+
+          <section class="card" id="card-emotion">
+            <h2>Negative emotion <span class="card__sub" id="emo-updated"></span></h2>
+            <div class="card__big" id="emo-share">–</div>
+            <div class="card__sub" id="emo-sub">threshold –</div>
+            <div class="bar">
+              <div class="bar__fill is-bad" id="emo-fill" style="width: 0%"></div>
+              <div class="bar__marker" id="emo-marker" style="left: 0%"></div>
+            </div>
+            <div class="card__sub" id="emo-scores"></div>
+            <ul class="gate" id="emo-gate"></ul>
+          </section>
+        </div>
+      </div>
+
+      <div class="demo__strip" id="strip"></div>
+
+      <section class="card">
+        <h2>Rule decisions and manual fires</h2>
+        <ol class="demo__events" id="events"></ol>
+      </section>
+    </main>
+
+    <script type="module">
+      import { rpcCall, subscribe, getMicState, setMicMuted, describeError } from "/static/js/api.js";
+
+      const $ = (id) => document.getElementById(id);
+      const STRIP_MAX = 6;
+      const frames = []; // newest first, emotion snapshots only (the 5 s cadence)
+
+      // ── mode banner / sensor sanity ──────────────────────────────────
+      async function refreshStatus() {
+        const banner = $("mode-banner");
+        try {
+          const s = await rpcCall("demo.status");
+          const sensors = [s.emotion_enabled ? "emotion ✓" : "emotion ✗", s.engagement_enabled ? "engagement ✓" : "engagement ✗"];
+          if (!s.demo_mode) {
+            banner.textContent = `NOT IN DEMO MODE — automatic interventions are LIVE (${sensors.join(", ")})`;
+            banner.classList.add("is-error");
+          } else {
+            banner.textContent = `Demo mode · ${sensors.join(" · ")} · ${s.session_active ? "session running" : "waiting for Start"}`;
+            banner.classList.remove("is-error");
+          }
+          setMuteLabel(s.mic_muted);
+        } catch (error) {
+          banner.textContent = `Could not reach the app (${describeError(error)})`;
+          banner.classList.add("is-error");
+        }
+      }
+
+      // ── mute (existing conversation.mic RPC; server value is the truth) ──
+      let muted = false;
+      function setMuteLabel(value) {
+        muted = Boolean(value);
+        $("mute").textContent = muted ? "Unmute mic" : "Mute mic";
+        $("mute").classList.toggle("btn--primary", muted);
+        $("mute").classList.toggle("btn--danger", !muted);
+      }
+      $("mute").addEventListener("click", async () => {
+        $("mute").disabled = true;
+        try {
+          const data = await setMicMuted(!muted);
+          setMuteLabel(data?.muted);
+          $("action-status").textContent = muted ? "Mic muted — the robot can't hear you." : "Mic live.";
+        } catch (error) {
+          $("action-status").textContent = `Mute failed (${describeError(error)})`;
+        } finally {
+          $("mute").disabled = false;
+        }
+      });
+
+      // ── manual interventions ─────────────────────────────────────────
+      function wireFire(id, kind, label) {
+        const button = $(id);
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          $("action-status").textContent = `Firing ${label} intervention…`;
+          try {
+            const r = await rpcCall("demo.intervene", { kind });
+            $("action-status").textContent = r.queued_behind_speech
+              ? `${label} intervention queued — it will speak after the current sentence.`
+              : `${label} intervention sent — the robot is responding.`;
+            addEvent(`manual ${label} intervention fired`);
+          } catch (error) {
+            $("action-status").textContent = `Could not fire (${describeError(error)})`;
+          } finally {
+            setTimeout(() => (button.disabled = false), 3000); // double-click guard only
+          }
+        });
+      }
+      wireFire("fire-engagement", "engagement", "engagement");
+      wireFire("fire-emotion", "emotion", "emotion");
+
+      // ── telemetry ────────────────────────────────────────────────────
+      const fmt = (v, d = 2) => (v === null || v === undefined ? "–" : Number(v).toFixed(d));
+      const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour12: false });
+
+      function renderGate(listId, p) {
+        const g = p.gate;
+        const rows = [
+          ["enough_samples", `samples ${p.samples ?? "–"}/${p.min_samples ?? "–"}`],
+          ["signal_active", "past threshold"],
+          ["robot_silent", "robot silent"],
+          ["interaction_cooldown_ok", p.interaction_cooldown_left_s > 0 ? `interaction cooldown ${Math.ceil(p.interaction_cooldown_left_s)} s` : "no recent interaction"],
+          ["intervention_cooldown_ok", p.intervention_cooldown_left_s > 0 ? `intervention cooldown ${Math.ceil(p.intervention_cooldown_left_s)} s` : "no recent intervention"],
+        ];
+        $(listId).innerHTML = rows
+          .map(([key, text]) => `<li class="${g ? (g[key] ? "ok" : "") : "na"}">${text}</li>`)
+          .join("");
+      }
+
+      function addEvent(text) {
+        const li = document.createElement("li");
+        li.textContent = `${new Date().toLocaleTimeString([], { hour12: false })} — ${text}`;
+        $("events").prepend(li);
+      }
+
+      function showFrame(p) {
+        if (p.jpeg_b64) {
+          $("snapshot").src = `data:image/jpeg;base64,${p.jpeg_b64}`;
+          $("snapshot").hidden = false;
+        }
+        $("snap-emotion").textContent = p.emotion ? `${p.emotion}` : "no face detected";
+        $("snap-time").textContent = clock(p.ts);
+      }
+
+      function onEmotion(p) {
+        showFrame(p);
+        frames.unshift(p);
+        frames.length = Math.min(frames.length, STRIP_MAX);
+        renderStrip();
+
+        $("emo-updated").textContent = clock(p.ts);
+        $("emo-share").textContent = fmt(p.negative_share);
+        $("emo-sub").textContent = `negative share over 30 s · threshold > ${fmt(p.threshold)}`;
+        $("emo-fill").style.width = `${Math.min(100, p.negative_share * 100)}%`;
+        $("emo-marker").style.left = `${p.threshold * 100}%`;
+        $("emo-scores").textContent = p.scores
+          ? Object.entries(p.scores)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+              .map(([k, v]) => `${k} ${fmt(v)}`)
+              .join(" · ")
+          : "not recorded (no face)";
+        renderGate("emo-gate", p);
+        flagFire("card-emotion", "emotion", p);
+      }
+
+      function onEngagement(p) {
+        $("eng-updated").textContent = clock(p.ts);
+        if (p.error) {
+          $("eng-score").textContent = "⚠";
+          $("eng-sub").textContent = p.error;
+          renderGate("eng-gate", { gate: null });
+          return;
+        }
+        $("eng-score").textContent = fmt(p.score);
+        $("eng-sub").textContent = `30 s average ${fmt(p.average)} · threshold < ${fmt(p.threshold)}`;
+        const fill = $("eng-fill");
+        fill.style.width = `${Math.min(100, p.score * 100)}%`;
+        fill.classList.toggle("is-bad", p.average !== null && p.average < p.threshold);
+        $("eng-marker").style.left = `${p.threshold * 100}%`;
+        renderGate("eng-gate", p);
+        flagFire("card-engagement", "engagement", p);
+      }
+
+      function flagFire(cardId, kind, p) {
+        $(cardId).classList.toggle("card--fire", Boolean(p.would_fire));
+        if (p.would_fire) {
+          $("fire-badge").hidden = false;
+          addEvent(`${kind} rule would have fired (${kind === "engagement" ? `avg ${fmt(p.average)}` : `neg. share ${fmt(p.negative_share)}`}) — suppressed`);
+          setTimeout(() => ($("fire-badge").hidden = true), 6000);
+        }
+      }
+
+      function renderStrip() {
+        $("strip").innerHTML = frames
+          .map(
+            (f, i) => `<div class="demo__thumb" data-i="${i}">
+              ${f.jpeg_b64 ? `<img src="data:image/jpeg;base64,${f.jpeg_b64}" alt="" />` : ""}
+              <div><span>${f.emotion ?? "no face"}</span><span>${clock(f.ts)}</span></div>
+            </div>`,
+          )
+          .join("");
+        $("strip").querySelectorAll(".demo__thumb").forEach((el) => {
+          el.addEventListener("click", () => showFrame(frames[Number(el.dataset.i)]));
+        });
+      }
+
+      subscribe("demo.sensing", (p) => (p.kind === "emotion" ? onEmotion(p) : onEngagement(p)));
+
+      getMicState().then((d) => setMuteLabel(d?.muted)).catch(() => {});
+      refreshStatus();
+      setInterval(refreshStatus, 15000);
+    </script>
+  </body>
+</html>

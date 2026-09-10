@@ -597,6 +597,12 @@ class LocalStream:
         def _participant() -> FileResponse:
             return FileResponse(str(static_dir / "participant.html"))
 
+        # GET /demo -> presenter-facing live-demo control page (frames, scores, gate
+        # state, mute, manual interventions). Only useful with --demo; harmless otherwise.
+        @settings_app.get("/demo")
+        def _demo() -> FileResponse:
+            return FileResponse(str(static_dir / "demo.html"))
+
         # GET /favicon.ico -> optional, avoid noisy 404s on some browsers
         @settings_app.get("/favicon.ico")
         def _favicon() -> Response:

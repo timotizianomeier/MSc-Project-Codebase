@@ -944,3 +944,17 @@ def test_demo_status_reports_mode_and_sensors(monkeypatch: pytest.MonkeyPatch) -
     assert status["demo_mode"] is True and status["control_mode"] is False
     assert status["emotion_enabled"] is True and status["engagement_enabled"] is False
     assert status["mic_muted"] is False
+
+
+def test_demo_page_is_served() -> None:
+    """GET /demo serves the presenter page; /participant is unchanged."""
+    app = FastAPI()
+    robot = SimpleNamespace(media=SimpleNamespace(audio=None, backend=None))
+    LocalStream(MagicMock(), robot, settings_app=app)._init_settings_ui_if_needed()
+    client = TestClient(app)
+
+    demo = client.get("/demo")
+    assert demo.status_code == 200
+    assert "text/html" in demo.headers["content-type"]
+    assert "Demo control" in demo.text and "demo.sensing" in demo.text
+    assert client.get("/participant").status_code == 200
