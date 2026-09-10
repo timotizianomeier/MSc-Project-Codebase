@@ -828,6 +828,15 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     negative_share,
                 )
                 self._mark_activity("emotion_intervention_counterfactual")
+            elif config.DEMO_MODE:
+                # Live demo: same counterfactual bookkeeping, but the "DEMO:" prefix
+                # matches nothing in parse_app_log.py so a demo log can never be
+                # mistaken for study data. The /demo page fires interventions manually.
+                logger.info(
+                    "DEMO: would have sent emotion intervention (negative_share=%.2f); cooldowns reset as if sent",
+                    negative_share,
+                )
+                self._mark_activity("emotion_intervention_counterfactual")
             else:
                 # Value logged at INFO for post-study extraction — the DEBUG poll
                 # line carries it too, but the trigger must survive INFO-only runs.
@@ -901,6 +910,15 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                 # stays identical between conditions.
                 logger.info(
                     "CONTROL: would have sent engagement intervention (average=%.2f); cooldowns reset as if sent",
+                    average,
+                )
+                self._mark_activity("engagement_intervention_counterfactual")
+            elif config.DEMO_MODE:
+                # Live demo: same counterfactual bookkeeping, but the "DEMO:" prefix
+                # matches nothing in parse_app_log.py so a demo log can never be
+                # mistaken for study data. The /demo page fires interventions manually.
+                logger.info(
+                    "DEMO: would have sent engagement intervention (average=%.2f); cooldowns reset as if sent",
                     average,
                 )
                 self._mark_activity("engagement_intervention_counterfactual")

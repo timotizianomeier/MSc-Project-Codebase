@@ -32,6 +32,15 @@ def parse_args() -> tuple[argparse.Namespace, list]:  # type: ignore
         ),
     )
     parser.add_argument(
+        "--demo",
+        default=False,
+        action="store_true",
+        help=(
+            "Live-demo mode: sensing and the intervention gates run normally, but automatic "
+            "interventions are only logged, not sent; the /demo page fires them manually"
+        ),
+    )
+    parser.add_argument(
         "--ui",
         default=False,
         action="store_true",

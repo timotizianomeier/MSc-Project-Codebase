@@ -132,6 +132,18 @@ def run(
         logger.warning("NOT interact — no greeting, no spoken replies, interventions are only")
         logger.warning("logged as 'CONTROL: would have ...' counterfactuals.")
         logger.warning("=" * 72)
+    if args.demo:
+        config.DEMO_MODE = True
+    if config.DEMO_MODE and config.CONTROL_MODE:
+        # Control already suppresses every intervention; one precedence rule here
+        # keeps every downstream branch a plain CONTROL/DEMO/live elif chain.
+        logger.warning("--demo ignored: CONTROL_MODE is on")
+        config.DEMO_MODE = False
+    elif config.DEMO_MODE:
+        logger.warning("=" * 72)
+        logger.warning("DEMO MODE: sensing and gates run normally, but automatic interventions")
+        logger.warning("are only logged as 'DEMO: would have ...'. Fire them from /demo.")
+        logger.warning("=" * 72)
 
     logger.info(
         "Configured Hugging Face realtime backend, connection mode: %s",

@@ -358,6 +358,12 @@ class Config:
     # refresh_runtime_config_from_env — a UI settings save must never flip the
     # experimental condition mid-session.
     CONTROL_MODE = _env_flag("CONTROL_MODE", default=False)
+    # Live-demo mode (usually set via the --demo CLI flag): sensing and the
+    # intervention gates run exactly as in the robot condition, but automatic
+    # interventions are only logged ("DEMO: would have sent ...") — the /demo
+    # control page fires them manually on cue. Same refresh exclusion as
+    # CONTROL_MODE: a UI settings save must not flip it mid-demo.
+    DEMO_MODE = _env_flag("DEMO_MODE", default=False)
 
     logger.debug(
         "HF mode: %s, HF session URL set: %s, HF direct URL set: %s",
