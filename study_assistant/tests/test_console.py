@@ -868,3 +868,17 @@ def test_on_app_loop_marshals_cross_loop_calls() -> None:
         app_loop.call_soon_threadsafe(app_loop.stop)
         thread.join(timeout=2)
         app_loop.close()
+
+
+def test_sensing_observer_is_wired_and_broadcasts_demo_sensing() -> None:
+    """Handler sensing snapshots are pushed to /rpc clients as demo.sensing (live-demo page)."""
+    app = FastAPI()
+    robot = SimpleNamespace(media=SimpleNamespace(audio=None, backend=None))
+    handler = MagicMock()
+    stream = LocalStream(handler, robot, settings_app=app)
+    stream._init_settings_ui_if_needed()
+
+    handler.set_sensing_observer.assert_called_once_with(stream._dispatch_sensing)
+    stream._rpc.broadcast_threadsafe = MagicMock()
+    stream._dispatch_sensing({"kind": "emotion", "emotion": "sad"})
+    stream._rpc.broadcast_threadsafe.assert_called_once_with("demo.sensing", {"kind": "emotion", "emotion": "sad"})

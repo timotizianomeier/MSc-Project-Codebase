@@ -153,6 +153,14 @@ class LocalStream:
         transcript_setter = getattr(self.handler, "set_transcript_observer", None)
         if callable(transcript_setter):
             transcript_setter(self._dispatch_transcript)
+        sensing_setter = getattr(self.handler, "set_sensing_observer", None)
+        if callable(sensing_setter):
+            sensing_setter(self._dispatch_sensing)
+
+    def _dispatch_sensing(self, payload: dict[str, object]) -> None:
+        """Push a demo.sensing notification (live-demo page telemetry) to JSON-RPC clients."""
+        if self._rpc is not None:
+            self._rpc.broadcast_threadsafe("demo.sensing", payload)
 
     def _dispatch_transcript(self, role: str, text: str, final: bool) -> None:
         """Push a conversation.transcript notification to JSON-RPC clients."""

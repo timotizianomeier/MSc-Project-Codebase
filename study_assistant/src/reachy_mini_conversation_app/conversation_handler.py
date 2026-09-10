@@ -3,7 +3,7 @@ import time
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import ClassVar, TypeAlias
+from typing import Any, ClassVar, TypeAlias
 from collections.abc import Callable
 
 import numpy as np
@@ -36,6 +36,7 @@ class ConversationHandler(AsyncStreamHandler, ABC):
     last_idle_behavior_time: float
     _activity_observer: Callable[[str], None] | None = None
     _transcript_observer: Callable[[str, str, bool], None] | None = None
+    _sensing_observer: Callable[[dict[str, Any]], None] | None = None
 
     def __init__(self) -> None:
         """Initialize the stream handler and shared idle/activity tracking."""
@@ -59,6 +60,19 @@ class ConversationHandler(AsyncStreamHandler, ABC):
                 observer(role, text, final)
             except Exception:
                 logger.debug("transcript observer raised (ignored)", exc_info=True)
+
+    def set_sensing_observer(self, observer: Callable[[dict[str, Any]], None] | None) -> None:
+        """Attach/detach a sensing observer, called with one per-poll telemetry payload (live demo)."""
+        self._sensing_observer = observer
+
+    def _emit_sensing(self, payload: dict[str, Any]) -> None:
+        """Forward one sensing snapshot to the observer, if attached."""
+        observer = self._sensing_observer
+        if observer is not None:
+            try:
+                observer(payload)
+            except Exception:
+                logger.debug("sensing observer raised (ignored)", exc_info=True)
 
     def _mark_activity(self, reason: str) -> None:
         """Record non-idle conversation activity for the idle timer."""

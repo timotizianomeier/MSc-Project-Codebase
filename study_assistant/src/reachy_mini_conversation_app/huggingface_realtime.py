@@ -59,6 +59,7 @@ from reachy_mini_conversation_app.engagement_client import FRAMES_PER_SCORE, fet
 from reachy_mini_conversation_app.emotion_classifier import classify_dominant_emotion
 from reachy_mini_conversation_app.engagement_monitor import EngagementMonitor
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
+from reachy_mini_conversation_app.intervention_monitor import InterventionMonitor
 from reachy_mini_conversation_app.tools.background_tool_manager import (
     ToolCallRoutine,
     ToolNotification,
@@ -77,6 +78,27 @@ _RESPONSE_REJECTION_RETRY_DELAY: Final[float] = 0.5
 _EMOTION_POLL_INTERVAL_S: Final[float] = 5.0
 _ENGAGEMENT_FRAME_INTERVAL_S: Final[float] = 0.5
 _ENGAGEMENT_SCORE_EVERY_TICKS: Final[int] = 10
+# Live-demo page thumbnails: 320 px @ q60 is ~20-30 KB of base64 once per 5 s —
+# readable on a projector, negligible on the websocket.
+_DEMO_FRAME_WIDTH: Final[int] = 320
+_DEMO_JPEG_QUALITY: Final[int] = 60
+
+
+def _encode_demo_frame(frame: NDArray[np.uint8]) -> str | None:
+    """Downscale a BGR camera frame and return it as base64 JPEG for the demo page (None on failure)."""
+    try:
+        # Lazy: cv2 ships with the emotion extra, which demo mode requires anyway.
+        import cv2
+
+        height, width = frame.shape[:2]
+        small: Any = frame
+        if width > _DEMO_FRAME_WIDTH:
+            small = cv2.resize(frame, (_DEMO_FRAME_WIDTH, int(height * _DEMO_FRAME_WIDTH / width)))
+        ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, _DEMO_JPEG_QUALITY])
+        return base64.b64encode(buf.tobytes()).decode("ascii") if ok else None
+    except Exception:
+        logger.debug("demo frame encode failed", exc_info=True)
+        return None
 
 
 class InputTranscriptChunksByItem(BaseModel):
@@ -761,6 +783,27 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             except Exception:
                 logger.exception("Emotion poll iteration failed; continuing")
 
+    def _demo_gate_payload(
+        self, monitor: InterventionMonitor[Any], now: float, response_done: bool
+    ) -> dict[str, Any]:
+        """Gate breakdown + cooldown countdowns for the live-demo page (pure, no side effects)."""
+        gate = monitor.gate_conditions(now, response_done, self.last_activity_time)
+        last_trigger = monitor.last_trigger_time
+        return {
+            "samples": monitor.sample_count,
+            "min_samples": monitor.MIN_SAMPLES,
+            "gate": gate,
+            "would_fire": all(gate.values()),
+            "interaction_cooldown_left_s": max(
+                0.0, monitor.INTERACTION_COOLDOWN_SECONDS - (now - self.last_activity_time)
+            ),
+            "intervention_cooldown_left_s": (
+                max(0.0, monitor.INTERVENTION_COOLDOWN_SECONDS - (now - last_trigger))
+                if last_trigger is not None
+                else 0.0
+            ),
+        }
+
     def _dump_emotion_frame(self, frame: NDArray[np.uint8], emotion: str | None) -> None:
         """Save the analyzed frame, named by its result, for post-hoc detector/classifier analysis."""
         if self._emotion_frame_dump_dir is None:
@@ -788,8 +831,27 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
         emotion, emotion_scores = classification if classification is not None else (None, None)
         if self._emotion_frame_dump_dir is not None:
             await asyncio.to_thread(self._dump_emotion_frame, frame, emotion)
-        if emotion is None:
+        # Live-demo telemetry is emitted BEFORE the no-face early return so the demo
+        # page keeps showing frames (labelled "no face") when the participant looks
+        # away — exactly the moment worth showing. Only the emotion poll carries an
+        # image: one source keeps the filmstrip cadence a clean 5 s.
+        demo_jpeg = await asyncio.to_thread(_encode_demo_frame, frame) if config.DEMO_MODE else None
+        if emotion is None or emotion_scores is None:
             logger.debug("Emotion poll: no face detected")
+            if config.DEMO_MODE:
+                now = time.monotonic()
+                self._emit_sensing(
+                    {
+                        "kind": "emotion",
+                        "ts": time.time(),
+                        "emotion": None,
+                        "scores": None,
+                        "negative_share": self._emotion_monitor.negative_share(),
+                        "threshold": self._emotion_monitor.NEGATIVE_THRESHOLD,
+                        "jpeg_b64": demo_jpeg,
+                        **self._demo_gate_payload(self._emotion_monitor, now, self._response_done_event.is_set()),
+                    }
+                )
             return
 
         now = time.monotonic()
@@ -813,6 +875,19 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             f"{intervention_gap:.1f}s" if intervention_gap is not None else "never",
             self._emotion_monitor.INTERVENTION_COOLDOWN_SECONDS,
         )
+        if config.DEMO_MODE:
+            self._emit_sensing(
+                {
+                    "kind": "emotion",
+                    "ts": time.time(),
+                    "emotion": emotion,
+                    "scores": {label: round(score, 3) for label, score in emotion_scores.items()},
+                    "negative_share": negative_share,
+                    "threshold": self._emotion_monitor.NEGATIVE_THRESHOLD,
+                    "jpeg_b64": demo_jpeg,
+                    **self._demo_gate_payload(self._emotion_monitor, now, response_done),
+                }
+            )
 
         if not self._is_connected():
             logger.debug("Emotion poll: not connected, skipping intervention check")
@@ -876,6 +951,19 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
 
         score = await asyncio.to_thread(fetch_engagement_score, self._engagement_http, list(self._engagement_frames))
         if score is None:
+            if config.DEMO_MODE:
+                # Surface a dead /score service (e.g. dropped tunnel) on the demo page
+                # instead of leaving a stale number on screen.
+                self._emit_sensing(
+                    {
+                        "kind": "engagement",
+                        "ts": time.time(),
+                        "score": None,
+                        "average": self._engagement_monitor.average_score(),
+                        "threshold": config.ENGAGEMENT_THRESHOLD,
+                        "error": "engagement service unavailable",
+                    }
+                )
             return
 
         now = time.monotonic()
@@ -898,6 +986,18 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             f"{intervention_gap:.1f}s" if intervention_gap is not None else "never",
             self._engagement_monitor.INTERVENTION_COOLDOWN_SECONDS,
         )
+        if config.DEMO_MODE:
+            self._emit_sensing(
+                {
+                    "kind": "engagement",
+                    "ts": time.time(),
+                    "score": score,
+                    "average": average,
+                    "threshold": config.ENGAGEMENT_THRESHOLD,
+                    "error": None,
+                    **self._demo_gate_payload(self._engagement_monitor, now, response_done),
+                }
+            )
 
         if not self._is_connected():
             logger.debug("Engagement poll: not connected, skipping intervention check")

@@ -133,3 +133,104 @@ async def test_sensing_still_records_in_demo_mode(monkeypatch: pytest.MonkeyPatc
     await handler._poll_emotion_once()
 
     assert handler._emotion_monitor.negative_share() > 0.0
+
+
+# ---------------------------------------------------------------- telemetry
+
+
+def test_gate_conditions_agree_with_should_intervene() -> None:
+    """The per-check breakdown is the same five predicates should_intervene() ANDs together."""
+    from reachy_mini_conversation_app.emotion_monitor import EmotionMonitor
+
+    monitor = EmotionMonitor(negative_threshold=0.5)
+    now = 1000.0
+    for i in range(3):
+        monitor.record(0.9, now - 10 + i)
+    for response_done, last_activity in ((True, now - 120), (False, now - 120), (True, now - 5)):
+        gate = monitor.gate_conditions(now, response_done, last_activity)
+        assert set(gate) == {
+            "enough_samples", "signal_active", "robot_silent", "interaction_cooldown_ok", "intervention_cooldown_ok"
+        }
+        assert all(gate.values()) == monitor.should_intervene(now, response_done, last_activity)
+    assert monitor.sample_count == 3
+
+
+def _collect(handler: HuggingFaceRealtimeHandler) -> list[dict]:
+    seen: list[dict] = []
+    handler.set_sensing_observer(seen.append)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_sensing_observer_receives_emotion_payload_with_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Demo mode emits one emotion snapshot per poll, carrying a real downscaled JPEG and the gate breakdown."""
+    handler = _make_handler()
+    seen = _collect(handler)
+    handler.deps.reachy_mini.media.get_frame.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
+    monkeypatch.setattr(hf_mod, "classify_dominant_emotion", lambda frame: ("sad", {"sad": 0.9, "neutral": 0.1}))
+    monkeypatch.setattr(handler, "_is_connected", lambda: False)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+
+    await handler._poll_emotion_once()
+
+    assert len(seen) == 1
+    p = seen[0]
+    assert p["kind"] == "emotion" and p["emotion"] == "sad"
+    assert p["scores"] == {"sad": 0.9, "neutral": 0.1}
+    assert p["samples"] == 1 and p["would_fire"] is False and p["gate"]["enough_samples"] is False
+    import base64
+
+    assert base64.b64decode(p["jpeg_b64"]).startswith(b"\xff\xd8")  # JPEG SOI marker
+
+
+@pytest.mark.asyncio
+async def test_sensing_observer_fires_on_no_face(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A no-face frame still reaches the page (emotion=None) — the moment worth showing."""
+    handler = _make_handler()
+    seen = _collect(handler)
+    handler.deps.reachy_mini.media.get_frame.return_value = np.zeros((4, 4, 3), dtype=np.uint8)
+    monkeypatch.setattr(hf_mod, "classify_dominant_emotion", lambda frame: None)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+
+    await handler._poll_emotion_once()
+
+    assert len(seen) == 1
+    assert seen[0]["emotion"] is None and seen[0]["scores"] is None and seen[0]["jpeg_b64"]
+    assert handler._emotion_monitor.sample_count == 0  # no-face frames are still not recorded
+
+
+@pytest.mark.asyncio
+async def test_no_sensing_emit_when_demo_mode_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Study runs pay nothing: the observer is never called outside demo mode."""
+    handler = _make_handler()
+    seen = _collect(handler)
+    handler.deps.reachy_mini.media.get_frame.return_value = np.zeros((4, 4, 3), dtype=np.uint8)
+    monkeypatch.setattr(hf_mod, "classify_dominant_emotion", lambda frame: ("sad", {"sad": 0.9, "neutral": 0.1}))
+    monkeypatch.setattr(handler, "_is_connected", lambda: False)
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+
+    await handler._poll_emotion_once()
+
+    assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_sensing_observer_receives_engagement_payload_and_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Engagement score ticks emit a snapshot; a dead /score service emits an explicit error."""
+    handler = _make_handler()
+    seen = _collect(handler)
+    handler.deps.reachy_mini.media.get_frame_jpeg.return_value = b"jpeg"
+    handler._engagement_http = MagicMock()
+    for _ in range(FRAMES_PER_SCORE):
+        handler._engagement_frames.append(b"jpeg")
+    monkeypatch.setattr(handler, "_is_connected", lambda: False)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+
+    monkeypatch.setattr(hf_mod, "fetch_engagement_score", lambda http, frames: 0.55)
+    await handler._poll_engagement_once(score_now=True)
+    monkeypatch.setattr(hf_mod, "fetch_engagement_score", lambda http, frames: None)
+    await handler._poll_engagement_once(score_now=True)
+
+    assert [p["kind"] for p in seen] == ["engagement", "engagement"]
+    assert seen[0]["score"] == 0.55 and seen[0]["error"] is None and "gate" in seen[0]
+    assert seen[1]["score"] is None and seen[1]["error"]

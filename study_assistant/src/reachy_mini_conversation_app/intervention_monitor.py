@@ -59,6 +59,27 @@ class InterventionMonitor(ABC, Generic[SampleValueT]):
             return False
         return True
 
+    def gate_conditions(self, now: float, response_done: bool, last_activity_time: float) -> dict[str, bool]:
+        """Return each should_intervene() check by name — the same five predicates, for display.
+
+        Pure, like should_intervene(); used by the live-demo page to say WHY the
+        gate is closed ("waiting for samples", "robot speaking", "cooldown").
+        """
+        return {
+            "enough_samples": len(self._samples) >= self.MIN_SAMPLES,
+            "signal_active": bool(self._signal_active()),
+            "robot_silent": response_done,
+            "interaction_cooldown_ok": now - last_activity_time > self.INTERACTION_COOLDOWN_SECONDS,
+            "intervention_cooldown_ok": (
+                self._last_trigger_time is None or now - self._last_trigger_time > self.INTERVENTION_COOLDOWN_SECONDS
+            ),
+        }
+
+    @property
+    def sample_count(self) -> int:
+        """Return how many observations the rolling window currently holds."""
+        return len(self._samples)
+
     def mark_intervened(self, now: float) -> None:
         """Record that an intervention was just sent, starting the intervention cooldown."""
         self._last_trigger_time = now
