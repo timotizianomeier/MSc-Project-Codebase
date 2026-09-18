@@ -51,8 +51,16 @@ from generate_appendix import (
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "output", "results-charts")
+OUTPUT_DIR_PAPER = os.path.join(os.path.dirname(OUTPUT_DIR),
+                                "results-charts-hri")
 # --sync pushes the fragments into each of these repos (all PRIVATE — the
 # charts render participant-derived data). Same \input contract everywhere.
+# The HRI paper says "control condition" where the report says "no-robot".
+# Renderers emit the REPORT's wording; main() additionally writes a
+# paper-worded copy of every fragment to OUTPUT_DIR_PAPER, and that copy is
+# what the HRI repo receives — the report's fragments stay byte-identical.
+PAPER_WORDING = (("No-Robot", "Control"), ("No-robot", "Control"),
+                 ("No-rob.", "Control"))
 SYNC_TARGETS = [
     os.path.expanduser("~/Projects/MSc-Project-Final-Report/results-charts"),
     os.path.expanduser("~/Projects/HRI-submission-Timo/results-charts"),
@@ -1264,19 +1272,21 @@ def _glmm_rows_cached(groups):
 
 def _render_glmm_table(groups, *, size, colsep,
                        width="\\textwidth") -> str:
-    """GLMM robustness check (Nicole 04.09): per-metric Gaussian LMM
-    (value ~ robot * adhd, random intercept per participant, effects
-    coding) next to the pipeline's nonparametric/t twins, plus a Poisson
-    GEE interaction p for the count metrics. Lazy import so the rest of
+    """LMM robustness table (Nicole 04.09; layout 18.09): per group the
+    robot / no-robot cell means with that group's paired Wilcoxon p, then
+    the Gaussian LMM (value ~ robot * adhd, random intercept per
+    participant, effects coding) next to its nonparametric twin for the
+    condition, group and interaction effects, in that order. The Poisson
+    GEE column was dropped 18.09 (unexplained in the paper, agrees with
+    the LMM); glmm_rows still returns p_int_gee for glmm_comparison.py's
+    own summary. Cell means are over all sessions entering the LMM (the
+    n column), the per-group p_W is paired. Lazy import so the rest of
     the pipeline keeps running without statsmodels."""
     rows = _glmm_rows_cached(groups)
-    # t twins dropped 07.09 (Nicole: report only one test); cell means
-    # added the same day so the actual group averages sit next to the
-    # model components.
-    keys = ("m_ra", "m_rn", "m_ca", "m_cn",
-            "p_int_lmm", "p_int_gee", "p_int_u",
+    keys = ("m_ra", "m_ca", "p_w_adhd", "m_rn", "m_cn", "p_w_noadhd",
             "p_cond_lmm", "p_cond_w",
-            "p_grp_lmm", "p_grp_u")
+            "p_grp_lmm", "p_grp_u",
+            "p_int_lmm", "p_int_u")
 
     def cell(v):
         if isinstance(v, str):
@@ -1285,28 +1295,28 @@ def _render_glmm_table(groups, *, size, colsep,
             return "{--}"
         return "{$<.001$}" if v < 0.001 else f"{v:.3f}"
 
-    mspecs = "".join(_sspecs(
-        [[r["m_ra"], r["m_rn"], r["m_ca"], r["m_cn"]] for r in rows]))
+    m = _sspecs([[r["m_ra"], r["m_ca"], r["m_rn"], r["m_cn"]] for r in rows])
+    ps = "S[table-format=1.3]"
+    colspec = f"{m[0]}{m[1]}{ps}{m[2]}{m[3]}{ps}{ps * 6}"
     body = "\n".join(
         f"{r['label']} & {{{r['n']}}} & "
         + " & ".join(cell(r[k]) for k in keys) + " \\\\"
         for r in rows)
     return f"""\\begingroup\\centering{size}
 \\setlength{{\\tabcolsep}}{{{colsep}}}%
-\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{mspecs}{"S[table-format=1.3]" * 7}@{{}}}}
+\\begin{{tabular*}}{{{width}}}{{@{{}}l@{{\\extracolsep{{\\fill}}}}c{colspec}@{{}}}}
 \\toprule
- & & \\multicolumn{{4}}{{c}}{{Mean}} &
-   \\multicolumn{{3}}{{c}}{{Interaction}} &
+ & & \\multicolumn{{3}}{{c}}{{ADHD}} &
+   \\multicolumn{{3}}{{c}}{{No-ADHD}} &
    \\multicolumn{{2}}{{c}}{{Condition}} &
-   \\multicolumn{{2}}{{c}}{{Group}} \\\\
-\\cmidrule(lr){{3-6}} \\cmidrule(lr){{7-9}} \\cmidrule(lr){{10-11}}
-\\cmidrule(lr){{12-13}}
- & & \\multicolumn{{2}}{{c}}{{Robot}} &
-   \\multicolumn{{2}}{{c}}{{No-Robot}} & & & & & & & \\\\
-\\cmidrule(lr){{3-4}} \\cmidrule(lr){{5-6}}
-Measure & {{$n$}} & {{ADHD}} & {{No-A.}} & {{ADHD}} & {{No-A.}} &
-  {{LMM}} & {{GEE}} & {{$p_U(\\Delta)$}} & {{LMM}} & {{$p_W$}} &
-  {{LMM}} & {{$p_U$}} \\\\
+   \\multicolumn{{2}}{{c}}{{Group}} &
+   \\multicolumn{{2}}{{c}}{{Interaction}} \\\\
+\\cmidrule(lr){{3-5}} \\cmidrule(lr){{6-8}} \\cmidrule(lr){{9-10}}
+\\cmidrule(lr){{11-12}} \\cmidrule(lr){{13-14}}
+Measure & {{$n$}} & {{Robot}} & {{No-Robot}} & {{$p_W$}} &
+  {{Robot}} & {{No-Robot}} & {{$p_W$}} &
+  {{LMM}} & {{$p_W$}} & {{LMM}} & {{$p_U$}} &
+  {{LMM}} & {{$p_U(\\Delta)$}} \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -1900,8 +1910,15 @@ CHART_BUILDERS = [chart_feature_means, chart_feature_means_col,
 # Main + sync
 # ============================================================================
 
+def _paper_wording(tex: str) -> str:
+    for report_word, paper_word in PAPER_WORDING:
+        tex = tex.replace(report_word, paper_word)
+    return tex
+
+
 def main() -> None:
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_PAPER, exist_ok=True)
     pre, _ = load_qualtrics(newest_file(FILE_PATTERNS["pre"]))
     pre = clean(pre, "PRE_PID", "pre")
     groups = assign_groups(pre)
@@ -1918,6 +1935,8 @@ def main() -> None:
         path = os.path.join(OUTPUT_DIR, f"{name}.tex")
         with open(path, "w") as f:
             f.write(header + tex + "\n")
+        with open(os.path.join(OUTPUT_DIR_PAPER, f"{name}.tex"), "w") as f:
+            f.write(header + _paper_wording(tex) + "\n")
         names.append(name)
         print(f"  wrote results-charts/{name}.tex")
 
@@ -1925,13 +1944,16 @@ def main() -> None:
     for name in names:
         preview.append(f"\\subsection*{{{name}}}\n"
                        f"\\input{{results-charts/{name}}}\n\\clearpage\n")
-    with open(os.path.join(OUTPUT_DIR, "results_preview.tex"), "w") as f:
-        f.write("\n".join(preview))
+    for out_dir in (OUTPUT_DIR, OUTPUT_DIR_PAPER):
+        with open(os.path.join(out_dir, "results_preview.tex"), "w") as f:
+            f.write("\n".join(preview))
     print(f"  wrote results-charts/results_preview.tex ({len(names)} charts)")
 
     if "--sync" in sys.argv:
         for target in SYNC_TARGETS:
-            sync_to_repo(target, names)
+            sync_to_repo(target, names,
+                         OUTPUT_DIR_PAPER if "HRI-submission" in target
+                         else OUTPUT_DIR)
 
 
 # Routing (04.09): every fragment ships to both repos — the HRI repo kept
@@ -1940,7 +1962,8 @@ def main() -> None:
 # only render once acmart's preamble loads those packages.
 
 
-def sync_to_repo(charts_dir: str, names: list[str]) -> None:
+def sync_to_repo(charts_dir: str, names: list[str],
+                 src_dir: str = OUTPUT_DIR) -> None:
     """Copy the chart fragments into one target repo's results-charts/ and
     push (same mechanics as generate_appendix.sync_to_thesis_repo; every
     target repo must stay PRIVATE)."""
@@ -1951,7 +1974,7 @@ def sync_to_repo(charts_dir: str, names: list[str]) -> None:
     os.makedirs(charts_dir, exist_ok=True)
     ship = names + ["results_preview"]
     for name in ship:
-        shutil.copy2(os.path.join(OUTPUT_DIR, f"{name}.tex"),
+        shutil.copy2(os.path.join(src_dir, f"{name}.tex"),
                      os.path.join(charts_dir, f"{name}.tex"))
     changed = subprocess.run(
         ["git", "status", "--porcelain", "--", os.path.basename(charts_dir)],

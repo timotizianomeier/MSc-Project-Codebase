@@ -88,6 +88,15 @@ def glmm_rows(groups) -> list[dict]:
         p_grp_t = safe(lambda a, c: sps.ttest_ind(a, c, equal_var=False),
                        m_a, m_c)
 
+        # per-group paired Wilcoxon (robot vs control within one group),
+        # same rule as the thesis tables' _wilcoxon_cells: >= 3 pairs
+        def _pw_group(g):
+            sub = paired[paired.index.map(groups.get) == g]
+            if len(sub) < 3 or not ((sub["Robot"] - sub["Control"]) != 0).any():
+                return float("nan")
+            return safe(lambda r, c: sps.wilcoxon(r, c),
+                        sub["Robot"], sub["Control"])
+
         # Gaussian LMM ---------------------------------------------------
         lmm = dict.fromkeys(["robot", "adhd", "robot:adhd"], float("nan"))
         note = ""
@@ -134,6 +143,8 @@ def glmm_rows(groups) -> list[dict]:
             "n": f"{len(long)}/{long['pid'].nunique()}", "note": note,
             "p_int_lmm": lmm["robot:adhd"], "p_int_gee": p_gee,
             "p_int_u": p_int_u, "p_int_t": p_int_t,
+            "p_w_adhd": _pw_group(gr.GROUP_ADHD),
+            "p_w_noadhd": _pw_group(gr.GROUP_CONTROL),
             "p_cond_lmm": lmm["robot"], "p_cond_w": p_cond_w,
             "p_cond_t": p_cond_t,
             "p_grp_lmm": lmm["adhd"], "p_grp_u": p_grp_u,
