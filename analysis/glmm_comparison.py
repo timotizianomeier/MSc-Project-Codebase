@@ -71,8 +71,9 @@ def glmm_rows(groups) -> list[dict]:
             except Exception:
                 return float("nan")
 
+        # same minimum as the thesis tables' _mwu_cells: >= 2 per group
         p_int_u = (safe(lambda a, c: sps.mannwhitneyu(a, c), d_a, d_c)
-                   if len(d_a) and len(d_c) else float("nan"))
+                   if len(d_a) >= 2 and len(d_c) >= 2 else float("nan"))
         p_int_t = (safe(lambda a, c: sps.ttest_ind(a, c, equal_var=False),
                         d_a, d_c)
                    if len(d_a) > 1 and len(d_c) > 1 else float("nan"))
@@ -84,7 +85,7 @@ def glmm_rows(groups) -> list[dict]:
                          paired["Robot"], paired["Control"])
                     if len(paired) > 1 else float("nan"))
         p_grp_u = (safe(lambda a, c: sps.mannwhitneyu(a, c), m_a, m_c)
-                   if len(m_a) and len(m_c) else float("nan"))
+                   if len(m_a) >= 2 and len(m_c) >= 2 else float("nan"))
         p_grp_t = safe(lambda a, c: sps.ttest_ind(a, c, equal_var=False),
                        m_a, m_c)
 
