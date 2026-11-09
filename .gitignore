@@ -23,3 +23,4 @@ v2_stack.sbatch
 analysis/output/
 check_pi_wipe_safe.sh
 *.tex
+analysis/rebuttal_checks/
